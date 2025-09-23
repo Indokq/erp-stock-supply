@@ -3,10 +3,36 @@ import '../shared/models/mock_data.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/widgets/qr_bottom_nav.dart';
 import '../shared/services/auth_service.dart';
+import '../supply_stock/supply_stock_page.dart';
 import '../../core/theme/app_colors.dart';
 
 class QuickAccessPage extends StatelessWidget {
   const QuickAccessPage({super.key});
+
+  void _handleQuickActionTap(BuildContext context, String label) {
+    switch (label) {
+      case 'STOCK SUPPLY':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SupplyStockPage()),
+        );
+        break;
+      case 'STOCK ADJUSTMENT':
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stock Adjustment feature coming soon')),
+        );
+        break;
+      case 'STOCK LIST':
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stock List feature coming soon')),
+        );
+        break;
+      default:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$label feature coming soon')),
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +95,7 @@ class QuickAccessPage extends StatelessWidget {
                                       label: action.label,
                                       icon: action.icon,
                                       color: action.color,
+                                      onTap: () => _handleQuickActionTap(context, action.label),
                                     );
                                   },
                                 );

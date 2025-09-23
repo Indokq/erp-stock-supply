@@ -72,4 +72,180 @@ class ApiService {
       };
     }
   }
+
+  static Future<Map<String, dynamic>> getSupplyStock({
+    DateTime? dateStart,
+    DateTime? dateEnd,
+  }) async {
+    try {
+      final startDate = dateStart?.toIso8601String().split('T')[0] ?? '2020-01-01';
+      final endDate = dateEnd?.toIso8601String().split('T')[0] ?? '2025-12-31';
+
+      final body = {
+        "apikey": "none",
+        "apidata": "EXEC spMst_Browse_Select @Data = 'STOCKSUPPLY', @ID = 1, @DateStart = '$startDate', @DateEnd = '$endDate', @Company_ID = 1, @Temp1 = NULL, @Temp2 = NULL"
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        // Check if the response contains an error message
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to fetch supply stock with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> createNewSupply({
+    required int supplyCls,
+    required String userEntry,
+    required String supplyDate,
+    required bool useTemplate,
+    required int companyId,
+  }) async {
+    try {
+      final body = {
+        "apikey": "none",
+        "apidata": "EXEC spInv_StockSupply_Select @Data = 'New', @Supply_Cls = $supplyCls, @Supply_ID = 0, @User_Entry = '$userEntry', @Supply_Date = '$supplyDate', @UseTemplate = ${useTemplate ? 1 : 0}, @Company_ID = $companyId"
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        // Check if the response contains an error message
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to create new supply with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSupplyDetail({
+    required int supplyCls,
+    required int supplyId,
+    required String userEntry,
+    required int companyId,
+  }) async {
+    try {
+      final body = {
+        "apikey": "none",
+        "apidata": "EXEC spInv_StockSupply_Select @Data = 'Detail', @Supply_Cls = $supplyCls, @Supply_ID = $supplyId, @User_Entry = '$userEntry', @Supply_Date = NULL, @UseTemplate = 0, @Company_ID = $companyId"
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        // Check if the response contains an error message
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to get supply detail with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
 }

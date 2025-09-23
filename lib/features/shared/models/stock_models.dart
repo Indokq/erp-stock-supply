@@ -70,3 +70,67 @@ class StockTransfer {
   final int quantity;
   final String status;
 }
+
+class SupplyStock {
+  const SupplyStock({
+    required this.supplyId,
+    required this.supplyNo,
+    required this.supplyDate,
+    required this.fromId,
+    required this.toId,
+    required this.remarks,
+    required this.templateName,
+    required this.parent,
+    required this.level,
+    required this.stsEdit,
+    required this.stsUpdate,
+    required this.selected,
+  });
+
+  final int supplyId;
+  final String supplyNo;
+  final DateTime supplyDate;
+  final String fromId;
+  final String toId;
+  final String remarks;
+  final String templateName;
+  final int parent;
+  final int level;
+  final int stsEdit;
+  final int stsUpdate;
+  final int selected;
+
+  factory SupplyStock.fromJson(Map<String, dynamic> json) {
+    return SupplyStock(
+      supplyId: json['Supply_ID'] ?? 0,
+      supplyNo: json['Supply_No'] ?? '',
+      supplyDate: DateTime.tryParse(json['Supply_Date'] ?? '') ?? DateTime.now(),
+      fromId: json['FromID'] ?? '',
+      toId: json['ToID'] ?? '',
+      remarks: json['Remarks'] ?? '',
+      templateName: json['Template_Name'] ?? '',
+      parent: json['Parent'] ?? 0,
+      level: json['Level'] ?? 0,
+      stsEdit: json['StsEdit'] ?? 0,
+      stsUpdate: json['StsUpdate'] ?? 0,
+      selected: json['Selected'] ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'Supply_ID': supplyId,
+      'Supply_No': supplyNo,
+      'Supply_Date': supplyDate.toIso8601String(),
+      'FromID': fromId,
+      'ToID': toId,
+      'Remarks': remarks,
+      'Template_Name': templateName,
+      'Parent': parent,
+      'Level': level,
+      'StsEdit': stsEdit,
+      'StsUpdate': stsUpdate,
+      'Selected': selected,
+    };
+  }
+}
