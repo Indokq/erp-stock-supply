@@ -1,4 +1,4 @@
-name: eos_erp
+name: Mobileinv
 description: "A new Flutter project."
 publish_to: 'none'
 version: 0.1.0
@@ -15,6 +15,22 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
+  rename: ^3.0.2
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/eos_logo.png"
+
+flutter_native_splash:
+  color: "#ffffff"                 # warna background (wajib)
+  image: "assets/images/eos_logo.png" # logo splash
+  color_dark: "#000000"             # warna bg dark mode (opsional)
+  image_dark: "assets/images/eos_logo.png"
+  android: true
+  ios: true
 
 flutter:
   uses-material-design: true
