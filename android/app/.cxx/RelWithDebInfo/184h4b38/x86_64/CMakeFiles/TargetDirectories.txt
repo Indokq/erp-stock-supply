@@ -1,0 +1,2 @@
+C:/EOS/Project/erp-stock-supply/android/app/.cxx/RelWithDebInfo/184h4b38/x86_64/CMakeFiles/edit_cache.dir
+C:/EOS/Project/erp-stock-supply/android/app/.cxx/RelWithDebInfo/184h4b38/x86_64/CMakeFiles/rebuild_cache.dir
