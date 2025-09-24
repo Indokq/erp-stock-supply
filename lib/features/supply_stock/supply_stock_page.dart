@@ -4,6 +4,9 @@ import '../shared/services/api_service.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/utils/formatters.dart';
 import 'create_supply_page.dart';
+import 'supply_detail_page.dart';
+import 'models/supply_header.dart';
+import 'edit_supply_page.dart';
 import '../../core/theme/app_colors.dart';
 
 class SupplyStockPage extends StatefulWidget {
@@ -337,15 +340,119 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           child: SupplyStockCard(
             supply: supply,
             onTap: () {
-              // TODO: Navigate to supply detail page
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Tapped on ${supply.supplyNo}')),
-              );
+              _openSupplyForEdit(supply);
             },
           ),
         );
       },
     );
+  }
+
+  Future<void> _openSupplyForEdit(SupplyStock supply) async {
+    // Fetch header and detail via API using provided apidata formats
+    try {
+      String _formatDdMmmYyyy(DateTime d) {
+        const months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        final dd = d.day.toString().padLeft(2, '0');
+        final mmm = months[d.month - 1];
+        final yyyy = d.year.toString();
+        return '$dd-$mmm-$yyyy';
+      }
+
+      final headerRes = await ApiService.getSupplyHeader(
+        supplyCls: 1,
+        supplyId: supply.supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+        // Pass date string per backend format e.g., 04-Mar-2025
+        supplyDateStr: _formatDdMmmYyyy(supply.supplyDate),
+      );
+
+      final detailRes = await ApiService.getSupplyDetail(
+        supplyCls: 1,
+        supplyId: supply.supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+      );
+
+      if (headerRes['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(headerRes['message'] ?? 'Failed to fetch header')),
+        );
+        return;
+      }
+      if (detailRes['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(detailRes['message'] ?? 'Failed to fetch detail')),
+        );
+        return;
+      }
+
+      final headerData = headerRes['data'];
+      final headerTbl1 = headerData['tbl1'] as List?;
+      final headerJson = (headerTbl1 != null && headerTbl1.isNotEmpty)
+          ? (headerTbl1.first as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+
+      final detailData = detailRes['data'];
+      final detailTbl1 = detailData['tbl1'] as List?;
+
+      final header = SupplyHeader.fromJson(headerJson);
+
+      // Map detail rows into editable items; be tolerant of missing fields
+      final List<SupplyDetailItem> items = (detailTbl1 ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .map((m) => SupplyDetailItem(
+                itemCode: (m['Item_Code'] ?? m['ItemCode'] ?? '').toString(),
+                itemName: (m['Item_Name'] ?? m['ItemName'] ?? '').toString(),
+                qty: () {
+                  final v = m['Qty'] ?? m['Quantity'];
+                  final s = v?.toString() ?? '';
+                  return double.tryParse(s) ?? 0;
+                }(),
+                unit: (m['OrderUnit'] ?? m['Unit'] ?? '').toString(),
+                lotNumber: (m['Lot_Number'] ?? m['LotNo'] ?? '').toString(),
+                heatNumber: (m['Heat_Number'] ?? m['HeatNo'] ?? '').toString(),
+                description: (m['Description'] ?? m['Desc'] ?? '').toString(),
+              ))
+          .toList();
+
+      if (!mounted) return;
+      // If header is editable, open full header-edit page first; otherwise go straight to detail view
+      if (supply.stsEdit == 1) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditSupplyPage(
+              header: header,
+              initialItems: items,
+              columnMetaRows: (headerData['tbl0'] as List?)
+                  ?.whereType<Map>()
+                  .map((e) => e.cast<String, dynamic>())
+                  .toList(),
+            ),
+          ),
+        );
+      } else {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SupplyDetailPage(
+              header: header,
+              initialItems: items,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to open supply: $e')),
+      );
+    }
   }
 }
 

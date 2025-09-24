@@ -4,7 +4,8 @@ import 'models/supply_header.dart';
 
 class SupplyDetailPage extends StatefulWidget {
   final SupplyHeader header;
-  const SupplyDetailPage({super.key, required this.header});
+  final List<SupplyDetailItem> initialItems;
+  const SupplyDetailPage({super.key, required this.header, this.initialItems = const []});
   @override
   State<SupplyDetailPage> createState() => _SupplyDetailPageState();
 }
@@ -17,6 +18,12 @@ class _SupplyDetailPageState extends State<SupplyDetailPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _detailItems = List.of(widget.initialItems);
   }
 
   void _addDetailItem() {
