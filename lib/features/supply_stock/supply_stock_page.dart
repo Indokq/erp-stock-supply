@@ -124,7 +124,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        title: const Text('Supply Stock'),
+        title: const Text('Stock Supply'),
         actions: [
           IconButton(
             icon: Icon(_showDateFilter ? Icons.filter_list : Icons.filter_list_outlined),
@@ -230,7 +230,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const SectionHeader(title: 'Supply Stock List'),
+                                const SectionHeader(title: 'Stock Supply List'),
                                 ElevatedButton.icon(
                                   onPressed: _navigateToCreateSupply,
                                   icon: const Icon(Icons.add, size: 20),

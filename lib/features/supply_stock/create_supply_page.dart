@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
 import '../../core/theme/app_colors.dart';
+import 'models/supply_header.dart';
+import 'supply_detail_page.dart';
 
 class CreateSupplyPage extends StatefulWidget {
   const CreateSupplyPage({super.key});
@@ -27,10 +31,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   final _qtyOrderController = TextEditingController();
   final _heatNoController = TextEditingController();
 
-  // Detail Items
-  List<SupplyDetailItem> _detailItems = [];
-  final _searchController = TextEditingController();
-
   bool _isLoading = false;
   bool _useTemplate = false;
 
@@ -51,7 +51,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     _itemNameController.dispose();
     _qtyOrderController.dispose();
     _heatNoController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -67,12 +66,42 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         companyId: 1,
       );
 
-      if (result['success']) {
-        // Process the response data to populate the form
+      if (result['success'] == true) {
+        // Try hydrate defaults if API returns template/header
         final data = result['data'];
-        // You can use this data to populate default values or get available options
+        // Decode and log executed statement if present
+        final String? dataencdec = data['dataencdec'] as String?;
+        if (dataencdec != null && dataencdec.isNotEmpty) {
+          try {
+            final decoded = utf8.decode(base64.decode(dataencdec));
+            debugPrint('🔎 API apidata decoded: $decoded');
+          } catch (e) {
+            debugPrint('⚠️ Failed to decode dataencdec: $e');
+          }
+        }
+        // Common patterns: tbl1 carry header row; tbl0 is column metadata
+        final List? tbl1 = data['tbl1'] as List?;
+        final Map<String, dynamic>? headerJson = (tbl1 != null && tbl1.isNotEmpty)
+            ? (tbl1.first as Map).cast<String, dynamic>()
+            : null;
+
+        if (headerJson != null) {
+          // Be defensive, fill only when present
+          final header = SupplyHeader.fromJson(headerJson);
+          _supplyNumberController.text = header.supplyNo;
+          _supplyDate = header.supplyDate;
+          _supplyFromController.text = header.fromId;
+          _supplyToController.text = header.toId;
+          _orderNoController.text = header.orderNo;
+          _projectNoController.text = header.projectNo;
+          _itemCodeController.text = header.itemCode;
+          _itemNameController.text = header.itemName;
+          _qtyOrderController.text = header.qty?.toString() ?? '';
+          _heatNoController.text = header.heatNumber;
+          setState(() {});
+        }
       } else {
-        _showErrorMessage(result['message']);
+        _showErrorMessage(result['message'] ?? 'Failed to initialize new supply');
       }
     } catch (e) {
       _showErrorMessage('Failed to initialize new supply: $e');
@@ -95,43 +124,40 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
   }
 
-  void _addDetailItem() {
-    setState(() {
-      _detailItems.add(SupplyDetailItem(
-        itemCode: '',
-        itemName: '',
-        qty: 0,
-        unit: '',
-        lotNumber: '',
-        heatNumber: '',
-        description: '',
-      ));
-    });
-  }
+  Future<void> _saveHeaderAndProceed() async {
+    if (!_formKey.currentState!.validate()) return;
 
-  void _removeDetailItem(int index) {
-    setState(() {
-      _detailItems.removeAt(index);
-    });
-  }
+    setState(() => _isLoading = true);
+    try {
+      // Optionally call an API to persist header first (if needed).
+      // For now we proceed to detail page, carrying header data object.
 
-  Future<void> _saveSupply() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      final header = SupplyHeader(
+        supplyId: 0, // replace with returned ID if API call returns it
+        supplyNo: _supplyNumberController.text.trim(),
+        supplyDate: _supplyDate,
+        fromId: _supplyFromController.text.trim(),
+        toId: _supplyToController.text.trim(),
+        orderNo: _orderNoController.text.trim(),
+        projectNo: _projectNoController.text.trim(),
+        itemCode: _itemCodeController.text.trim(),
+        itemName: _itemNameController.text.trim(),
+        qty: double.tryParse(_qtyOrderController.text.trim().replaceAll(',', '.')),
+        heatNumber: _heatNoController.text.trim(),
+      );
 
-      try {
-        // Here you would implement the save API call
-        // For now, we'll show a success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Supply stock created successfully'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        Navigator.pop(context, true);
-      } catch (e) {
-        _showErrorMessage('Failed to save supply: $e');
-      } finally {
+      // Navigate to detail page and replace current header page
+      if (!mounted) return;
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SupplyDetailPage(header: header),
+        ),
+      );
+    } catch (e) {
+      _showErrorMessage('Failed to proceed to detail: $e');
+    } finally {
+      if (mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -159,10 +185,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        title: const Text('Stock Supply'),
+        title: const Text('Stock Supply - Header'),
         actions: [
           TextButton(
-            onPressed: _saveSupply,
+            onPressed: _saveHeaderAndProceed,
             child: const Text(
               'SAVE',
               style: TextStyle(
@@ -363,300 +389,22 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               ),
             ),
 
-            // Detail Section
+            // Note: Detail UI removed from this page. Detail is on its own page after saving header.
             Expanded(
               child: Container(
                 color: AppColors.surfaceLight,
-                child: Column(
-                  children: [
-                    Container(
-                      color: AppColors.surfaceCard,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Detail',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: _addDetailItem,
-                            icon: const Icon(Icons.add),
-                            tooltip: 'Add Item',
-                          ),
-                        ],
+                alignment: Alignment.center,
+                child: Text(
+                  'After saving the header, you will be redirected to the Detail page.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
                       ),
-                    ),
-
-                    // Search Bar
-                    Container(
-                      color: AppColors.surfaceCard,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: const InputDecoration(
-                          hintText: 'Search',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-
-                    // Detail Items Table Header
-                    Container(
-                      color: AppColors.surfaceCard,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      child: const Row(
-                        children: [
-                          Expanded(flex: 2, child: Text('Item Code', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 3, child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 1, child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 2, child: Text('Lot Number', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 2, child: Text('Heat Number', style: TextStyle(fontWeight: FontWeight.w600))),
-                          Expanded(flex: 3, child: Text('Description', style: TextStyle(fontWeight: FontWeight.w600))),
-                          SizedBox(width: 48),
-                        ],
-                      ),
-                    ),
-
-                    // Detail Items List
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _detailItems.length,
-                        itemBuilder: (context, index) {
-                          return DetailItemRow(
-                            item: _detailItems[index],
-                            onChanged: (updatedItem) {
-                              setState(() {
-                                _detailItems[index] = updatedItem;
-                              });
-                            },
-                            onDelete: () => _removeDetailItem(index),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // Summary Section
-                    Container(
-                      color: AppColors.surfaceCard,
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Total Item: ${_detailItems.length}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(width: 32),
-                          Text(
-                            'Total Qty: ${_detailItems.fold<double>(0, (sum, item) => sum + item.qty).toStringAsFixed(2)}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  textAlign: TextAlign.center,
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class SupplyDetailItem {
-  String itemCode;
-  String itemName;
-  double qty;
-  String unit;
-  String lotNumber;
-  String heatNumber;
-  String description;
-
-  SupplyDetailItem({
-    required this.itemCode,
-    required this.itemName,
-    required this.qty,
-    required this.unit,
-    required this.lotNumber,
-    required this.heatNumber,
-    required this.description,
-  });
-}
-
-class DetailItemRow extends StatelessWidget {
-  final SupplyDetailItem item;
-  final Function(SupplyDetailItem) onChanged;
-  final VoidCallback onDelete;
-
-  const DetailItemRow({
-    super.key,
-    required this.item,
-    required this.onChanged,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.surfaceCard,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              initialValue: item.itemCode,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: value,
-                itemName: item.itemName,
-                qty: item.qty,
-                unit: item.unit,
-                lotNumber: item.lotNumber,
-                heatNumber: item.heatNumber,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              initialValue: item.itemName,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: value,
-                qty: item.qty,
-                unit: item.unit,
-                lotNumber: item.lotNumber,
-                heatNumber: item.heatNumber,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 1,
-            child: TextFormField(
-              initialValue: item.qty.toString(),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              keyboardType: TextInputType.number,
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: item.itemName,
-                qty: double.tryParse(value) ?? 0,
-                unit: item.unit,
-                lotNumber: item.lotNumber,
-                heatNumber: item.heatNumber,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 1,
-            child: TextFormField(
-              initialValue: item.unit,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: item.itemName,
-                qty: item.qty,
-                unit: value,
-                lotNumber: item.lotNumber,
-                heatNumber: item.heatNumber,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              initialValue: item.lotNumber,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: item.itemName,
-                qty: item.qty,
-                unit: item.unit,
-                lotNumber: value,
-                heatNumber: item.heatNumber,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              initialValue: item.heatNumber,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: item.itemName,
-                qty: item.qty,
-                unit: item.unit,
-                lotNumber: item.lotNumber,
-                heatNumber: value,
-                description: item.description,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 3,
-            child: TextFormField(
-              initialValue: item.description,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) => onChanged(SupplyDetailItem(
-                itemCode: item.itemCode,
-                itemName: item.itemName,
-                qty: item.qty,
-                unit: item.unit,
-                lotNumber: item.lotNumber,
-                heatNumber: item.heatNumber,
-                description: value,
-              )),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete, color: AppColors.error),
-            iconSize: 20,
-          ),
-        ],
       ),
     );
   }

@@ -72,7 +72,7 @@ class QuickAccessPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SectionHeader(
-                              title: 'Quick Access',
+                              title: 'Menu',
                             ),
                             const SizedBox(height: 12),
                             LayoutBuilder(

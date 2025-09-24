@@ -144,7 +144,7 @@ class ApiService {
         "apikey": "none",
         "apidata": "EXEC spInv_StockSupply_Select @Data = 'New', @Supply_Cls = $supplyCls, @Supply_ID = 0, @User_Entry = '$userEntry', @Supply_Date = '$supplyDate', @UseTemplate = ${useTemplate ? 1 : 0}, @Company_ID = $companyId"
       };
-
+  
       print('🔗 API URL: $baseUrl');
       print('📤 Request Body: ${jsonEncode(body)}');
 
