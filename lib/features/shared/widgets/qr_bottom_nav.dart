@@ -12,7 +12,7 @@ class QrBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80,
+      height: 72,
       decoration: BoxDecoration(
         color: AppColors.surfaceCard,
         borderRadius: const BorderRadius.only(
@@ -28,8 +28,8 @@ class QrBottomNav extends StatelessWidget {
         child: GestureDetector(
           onTap: onQrPressed,
           child: Container(
-            width: 64,
-            height: 64,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.surfaceCard,
@@ -40,7 +40,7 @@ class QrBottomNav extends StatelessWidget {
             ),
             child: Icon(
               Icons.qr_code_scanner_outlined,
-              size: 32,
+              size: 28,
               color: Colors.black.withOpacity(0.7),
             ),
           ),

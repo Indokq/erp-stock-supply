@@ -4,9 +4,9 @@ import '../shared/services/api_service.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/utils/formatters.dart';
 import 'create_supply_page.dart';
-import 'supply_detail_page.dart';
 import 'models/supply_header.dart';
 import 'edit_supply_page.dart';
+import 'models/supply_detail_item.dart';
 import '../../core/theme/app_colors.dart';
 
 class SupplyStockPage extends StatefulWidget {
@@ -220,48 +220,71 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const SectionHeader(title: 'Stock Supply List'),
-                                ElevatedButton.icon(
-                                  onPressed: _navigateToCreateSupply,
-                                  icon: const Icon(Icons.add, size: 20),
-                                  label: const Text('Create New'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryBlue,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isNarrow = constraints.maxWidth < 360;
+                          return isNarrow
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SectionHeader(title: 'Stock Supply List'),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _navigateToCreateSupply,
+                                        icon: const Icon(Icons.add, size: 18),
+                                        label: const Text('Create New'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primaryBlue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Total: ${_supplyStocks.length} supply records',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
+                                  ],
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const SectionHeader(title: 'Stock Supply List'),
+                                    ElevatedButton.icon(
+                                      onPressed: _navigateToCreateSupply,
+                                      icon: const Icon(Icons.add, size: 20),
+                                      label: const Text('Create New'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primaryBlue,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                        },
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Total: ${_supplyStocks.length} supply records',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             Expanded(
@@ -423,31 +446,22 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
 
       if (!mounted) return;
       // If header is editable, open full header-edit page first; otherwise go straight to detail view
-      if (supply.stsEdit == 1) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditSupplyPage(
-              header: header,
-              initialItems: items,
-              columnMetaRows: (headerData['tbl0'] as List?)
-                  ?.whereType<Map>()
-                  .map((e) => e.cast<String, dynamic>())
-                  .toList(),
-            ),
+      final canEdit = supply.stsEdit == 1;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditSupplyPage(
+            header: header,
+            initialItems: items,
+            columnMetaRows: (headerData['tbl0'] as List?)
+                ?.whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .toList(),
+            readOnly: !canEdit,
           ),
-        );
-      } else {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SupplyDetailPage(
-              header: header,
-              initialItems: items,
-            ),
-          ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to open supply: $e')),
