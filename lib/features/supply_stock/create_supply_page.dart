@@ -1350,21 +1350,21 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     if (trimmedDisplay == null || trimmedDisplay.isEmpty) return;
 
     switch(field) {
-      case 'Prepared By':
+      case 'Prepared':
         if (_preparedByController.text.trim() != trimmedDisplay) {
           _preparedByController.text = trimmedDisplay;
           _preparedById = idValue != null ? int.tryParse(idValue) ?? 0 : 0;
           if (mounted) setState(() {});
         }
         break;
-      case 'Approved By':
+      case 'Approved':
         if (_approvedByController.text.trim() != trimmedDisplay) {
           _approvedByController.text = trimmedDisplay;
           _approvedById = idValue ?? '';
           if (mounted) setState(() {});
         }
         break;
-      case 'Received By':
+      case 'Received':
         if (_receivedByController.text.trim() != trimmedDisplay) {
           _receivedByController.text = trimmedDisplay;
           _receivedById = idValue ?? '';
@@ -2187,7 +2187,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
-                              if (_isVisible('Prepared By'))
+                              if (_isVisible('Prepared'))
                                 Row(
                                   children: [
                                     Expanded(
@@ -2196,9 +2196,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Prepared By'),
+                                        onTap: () => _browseEmployee(field: 'Prepared'),
                                         decoration: _inputDecoration(
-                                          'Prepared By',
+                                          'Prepared',
                                           readOnly: true,
                                         ).copyWith(
                                           suffixIcon: const Icon(Icons.search),
@@ -2207,8 +2207,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                     ),
                                   ],
                                 ),
-                              if (_isVisible('Prepared By')) const SizedBox(height: 16),
-                              if (_isVisible('Approved By'))
+                              if (_isVisible('Prepared')) const SizedBox(height: 16),
+                              if (_isVisible('Approved'))
                                 Row(
                                   children: [
                                     Expanded(
@@ -2217,9 +2217,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Approved By'),
+                                        onTap: () => _browseEmployee(field: 'Approved'),
                                         decoration: _inputDecoration(
-                                          'Approved By',
+                                          'Approved',
                                           readOnly: true,
                                         ).copyWith(
                                           suffixIcon: const Icon(Icons.search),
@@ -2228,8 +2228,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                     ),
                                   ],
                                 ),
-                              if (_isVisible('Approved By')) const SizedBox(height: 16),
-                              if (_isVisible('Received By'))
+                              if (_isVisible('Approved')) const SizedBox(height: 16),
+                              if (_isVisible('Received'))
                                 Row(
                                   children: [
                                     Expanded(
@@ -2238,9 +2238,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Received By'),
+                                        onTap: () => _browseEmployee(field: 'Received'),
                                         decoration: _inputDecoration(
-                                          'Received By',
+                                          'Received',
                                           readOnly: true,
                                         ).copyWith(
                                           suffixIcon: const Icon(Icons.search),
@@ -2655,7 +2655,5 @@ class _ColumnMeta {
     );
   }
 }
-
-
 
 

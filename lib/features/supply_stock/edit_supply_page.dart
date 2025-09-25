@@ -34,17 +34,12 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   DateTime _supplyDate = DateTime.now();
 
   // Order Information
-  final _orderIdController = TextEditingController();
   final _orderNoController = TextEditingController();
   final _projectNoController = TextEditingController();
-  final _orderSeqIdController = TextEditingController();
   final _itemCodeController = TextEditingController();
   final _itemNameController = TextEditingController();
   final _qtyOrderController = TextEditingController();
-  final _orderUnitController = TextEditingController();
-  final _lotNumberController = TextEditingController();
   final _heatNoController = TextEditingController();
-  final _sizeController = TextEditingController();
 
   // References / Template
   final _refNoController = TextEditingController();
@@ -388,36 +383,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                           ],
                                         ),
                                       if (_isVisible('Order No.') || _isVisible('Project No.')) const SizedBox(height: 16),
-                                      if (_isVisible('Order ID') || _isVisible('Seq ID'))
-                                        Row(
-                                          children: [
-                                            if (_isVisible('Order ID'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _orderIdController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Order ID',
-                                                    readOnly: true,
-                                                  ),
-                                                  keyboardType: TextInputType.number,
-                                                ),
-                                              ),
-                                            if (_isVisible('Order ID') && _isVisible('Seq ID')) const SizedBox(width: 16),
-                                            if (_isVisible('Seq ID'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _orderSeqIdController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Seq ID',
-                                                    readOnly: true,
-                                                  ),
-                                                  keyboardType: TextInputType.number,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
+                                      // Removed Order ID / Seq ID to match desired columns
                                       const SizedBox(height: 16),
                                       if (_isVisible('Item Code') || _isVisible('Item Name'))
                                         Row(
@@ -479,52 +445,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               ),
                                           ],
                                         ),
-                                      if (_isVisible('Unit') || _isVisible('Size')) const SizedBox(height: 16),
-                                      if (_isVisible('Unit') || _isVisible('Size'))
-                                        Row(
-                                          children: [
-                                            if (_isVisible('Unit'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _orderUnitController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Unit',
-                                                    readOnly: true,
-                                                  ),
-                                                ),
-                                              ),
-                                            if (_isVisible('Unit') && _isVisible('Size'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Size'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _sizeController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Size',
-                                                    readOnly: true,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      if (_isVisible('Unit') || _isVisible('Size')) const SizedBox(height: 16),
-                                      if (_isVisible('Lot No'))
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: TextFormField(
-                                                controller: _lotNumberController,
-                                                readOnly: true,
-                                                decoration: _inputDecoration(
-                                                  'Lot No',
-                                                  readOnly: true,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                      // Removed Unit and Size to match order confirmation
+                                      // Removed Lot No to match desired columns
                                     ],
                                   ),
                                 ),
