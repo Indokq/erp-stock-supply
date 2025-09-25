@@ -797,6 +797,108 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     setState(() {});
   }
 
+  Future<void> _browseItemStock(int index) async {
+    try {
+      final result = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
+      if (result['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Gagal load item stock'), backgroundColor: Colors.redAccent),
+        );
+        return;
+      }
+
+      final data = result['data'];
+      if (data is! Map<String, dynamic>) return;
+      final list = data['tbl1'];
+      final rows = (list is List)
+          ? list
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList()
+          : <Map<String, dynamic>>[];
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data item stock kosong'), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final r = rows[i];
+                      final code = _getStringValue(r, const ['Item_Code', 'Code', 'SKU'], partialMatches: const ['code', 'sku']) ?? '';
+                      final name = _getStringValue(r, const ['Item_Name', 'Name', 'Title', 'Description'], partialMatches: const ['name', 'title', 'desc']) ?? '';
+                      final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
+                      final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
+                      return ListTile(
+                        leading: const Icon(Icons.inventory_2_outlined),
+                        title: Text(name.isNotEmpty ? name : code),
+                        subtitle: [
+                          if (code.isNotEmpty) 'Code: $code',
+                          if (lot.isNotEmpty) 'Lot: $lot',
+                          if (heat.isNotEmpty) 'Heat: $heat',
+                        ].join(' • ').isEmpty
+                            ? null
+                            : Text([
+                                if (code.isNotEmpty) 'Code: $code',
+                                if (lot.isNotEmpty) 'Lot: $lot',
+                                if (heat.isNotEmpty) 'Heat: $heat',
+                              ].join(' • ')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(sheetContext).pop(r),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (!mounted || selected == null) return;
+      setState(() {
+        final code = _getStringValue(selected, const ['Item_Code', 'Code', 'SKU'], partialMatches: const ['code', 'sku']) ?? '';
+        final name = _getStringValue(selected, const ['Item_Name', 'Name', 'Title', 'Description'], partialMatches: const ['name', 'title', 'desc']) ?? '';
+        final lot = _getStringValue(selected, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
+        final heat = _getStringValue(selected, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
+
+        final current = _detailItems[index];
+        _detailItems[index] = SupplyDetailItem(
+          itemCode: code.isNotEmpty ? code : current.itemCode,
+          itemName: name.isNotEmpty ? name : current.itemName,
+          qty: current.qty,
+          unit: current.unit,
+          lotNumber: lot.isNotEmpty ? lot : current.lotNumber,
+          heatNumber: heat.isNotEmpty ? heat : current.heatNumber,
+          description: current.description,
+          size: current.size,
+        );
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error browse item: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -1384,6 +1486,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               },
                                               onDelete: widget.readOnly ? null : () => _removeDetailItem(entry.key),
                                               readOnly: widget.readOnly,
+                                              onBrowse: widget.readOnly ? null : () => _browseItemStock(entry.key),
                                             ),
                                           ),
                                         ],

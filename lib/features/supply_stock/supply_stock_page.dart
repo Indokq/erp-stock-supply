@@ -524,7 +524,7 @@ class SupplyStockCard extends StatelessWidget {
                     ),
                   ),
                   StatusChip(
-                    label: supply.stsEdit == 1 ? 'Editable' : 'Locked',
+                    label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
                     tone:
                         supply.stsEdit == 1 ? AppColors.success : AppColors.textTertiary,
                   ),
