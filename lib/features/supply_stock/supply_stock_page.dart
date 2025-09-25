@@ -4,6 +4,9 @@ import '../shared/services/api_service.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/utils/formatters.dart';
 import 'create_supply_page.dart';
+import 'edit_supply_page.dart';
+import 'models/supply_header.dart';
+import 'models/supply_detail_item.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/responsive/responsive.dart';
 
@@ -390,11 +393,79 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           padding: EdgeInsets.only(bottom: isCompact ? 10 : 12),
           child: SupplyStockCard(
             supply: supply,
-            onTap: () {
-              // TODO: Navigate to supply detail page
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Tapped on ${supply.supplyNo}')),
+            onTap: () async {
+              // Show loading indicator
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(child: CircularProgressIndicator()),
               );
+
+              try {
+                // Get the full supply header and detail data from API
+                final result = await ApiService.getSupplyHeader(
+                  supplyCls: 1, // Assuming supply class 1
+                  supplyId: supply.supplyId,
+                  userEntry: 'admin', // Using default user
+                  companyId: 1, // Default company
+                );
+
+                if (result['success'] == true) {
+                  final data = result['data'];
+                  Navigator.of(context).pop(); // Close loading indicator
+
+                  // Get the header row from the response
+                  final List? tbl1 = data['tbl1'] as List?;
+                  final Map<String, dynamic>? headerJson = (tbl1 != null && tbl1.isNotEmpty)
+                      ? (tbl1.first as Map).cast<String, dynamic>()
+                      : null;
+
+                  if (headerJson != null) {
+                    // We'll pass an empty list since SupplyDetailItem doesn't have fromJson
+                  final List<SupplyDetailItem> detailItems = [];
+
+                    // Navigate to the edit supply page with full data
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditSupplyPage(
+                          header: SupplyHeader.fromJson(headerJson),
+                          initialItems: detailItems,
+                          // Add any additional parameters as needed
+                        ),
+                      ),
+                    ).then((_) {
+                      // Refresh the list when returning from edit page
+                      _loadSupplyStocks();
+                    });
+                  } else {
+                    Navigator.of(context).pop(); // Close loading indicator
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to load supply data'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } else {
+                  Navigator.of(context).pop(); // Close loading indicator
+                  final message = result['message'] ?? 'Failed to load supply data';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(message.toString()),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } catch (e) {
+                Navigator.of(context).pop(); // Close loading indicator
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error loading supply: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
           ),
         );
