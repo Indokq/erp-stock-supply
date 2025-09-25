@@ -127,6 +127,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
               .map((m) => MapEntry(m.colName, m)),
         );
     }
+    // If no initial details provided, fetch from API
+    if (_detailItems.isEmpty) {
+      _loadSupplyDetails();
+    }
   }
 
   @override
@@ -481,6 +485,113 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error loading employees: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadSupplyDetails() async {
+    try {
+      final user = AuthService.currentUser ?? 'admin';
+      final result = await ApiService.getSupplyDetail(
+        supplyCls: 1,
+        supplyId: widget.header.supplyId,
+        userEntry: user,
+        companyId: 1,
+      );
+      if (result['success'] != true) {
+        // Feedback but keep UI usable
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']?.toString() ?? 'Failed to load details'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final data = result['data'];
+      if (data is! Map<String, dynamic>) return;
+      // Use tbl1 for detail rows; avoid tbl0 (column metadata)
+      final list = data['tbl1'];
+      final rows = (list is List)
+          ? list
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList()
+          : <Map<String, dynamic>>[];
+      if (rows.isEmpty) return;
+
+      double _toDouble(String? s) {
+        if (s == null || s.trim().isEmpty) return 0;
+        return double.tryParse(s.replaceAll(',', '')) ?? 0;
+      }
+
+      SupplyDetailItem _mapRow(Map<String, dynamic> r) {
+        final itemCode = _getStringValue(
+          r,
+          const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+          partialMatches: const ['itemcode', 'code', 'sku'],
+        ) ?? '';
+        final itemName = _getStringValue(
+          r,
+          const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'],
+          partialMatches: const ['itemname', 'name', 'title', 'desc'],
+        ) ?? '';
+        final qtyStr = _getStringValue(
+          r,
+          const ['Qty', 'Qty_Order', 'Quantity'],
+          partialMatches: const ['qty', 'quantity'],
+        );
+        final unit = _getStringValue(
+          r,
+          const ['OrderUnit', 'Unit', 'UOM'],
+          partialMatches: const ['unit', 'uom'],
+        ) ?? '';
+        final lotNumber = _getStringValue(
+          r,
+          const ['Lot_Number', 'LotNo', 'Lot'],
+          partialMatches: const ['lot'],
+        ) ?? '';
+        final heatNumber = _getStringValue(
+          r,
+          const ['Heat_Number', 'HeatNo', 'Heat'],
+          partialMatches: const ['heat'],
+        ) ?? '';
+        final size = _getStringValue(
+          r,
+          const ['Size', 'Item_Size'],
+          partialMatches: const ['size'],
+        ) ?? '';
+        final description = _getStringValue(
+          r,
+          const ['Description', 'Remark', 'Notes'],
+          partialMatches: const ['description', 'remark', 'notes', 'desc'],
+        ) ?? '';
+
+        return SupplyDetailItem(
+          itemCode: itemCode,
+          itemName: itemName,
+          qty: _toDouble(qtyStr),
+          unit: unit,
+          lotNumber: lotNumber,
+          heatNumber: heatNumber,
+          description: description,
+          size: size,
+        );
+      }
+
+      final items = rows.map(_mapRow).toList();
+      if (!mounted) return;
+      setState(() {
+        _detailItems = items;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading details: $e'),
           backgroundColor: Colors.redAccent,
         ),
       );

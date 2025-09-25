@@ -6,6 +6,7 @@ class SupplyDetailItem {
   String lotNumber;
   String heatNumber;
   String description;
+  String size;
 
   SupplyDetailItem({
     required this.itemCode,
@@ -15,6 +16,7 @@ class SupplyDetailItem {
     required this.lotNumber,
     required this.heatNumber,
     required this.description,
+    this.size = '',
   });
 
   SupplyDetailItem copyWith({
@@ -25,6 +27,7 @@ class SupplyDetailItem {
     String? lotNumber,
     String? heatNumber,
     String? description,
+    String? size,
   }) {
     return SupplyDetailItem(
       itemCode: itemCode ?? this.itemCode,
@@ -34,7 +37,7 @@ class SupplyDetailItem {
       lotNumber: lotNumber ?? this.lotNumber,
       heatNumber: heatNumber ?? this.heatNumber,
       description: description ?? this.description,
+      size: size ?? this.size,
     );
   }
 }
-
