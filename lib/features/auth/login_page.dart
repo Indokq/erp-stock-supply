@@ -98,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(
@@ -122,7 +122,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildFormCard(ThemeData theme) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       decoration: BoxDecoration(
         color: LoginColors.cardSurface,
         borderRadius: BorderRadius.zero,
@@ -284,7 +284,7 @@ class _LoginPageState extends State<LoginPage> {
                   )
                 : null,
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.zero,
               borderSide: const BorderSide(color: LoginColors.cardBorder),

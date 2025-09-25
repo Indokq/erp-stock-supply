@@ -5,7 +5,7 @@ import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'models/supply_header.dart';
-import 'supply_detail_page.dart';
+import 'models/supply_detail_item.dart';
 
 class CreateSupplyPage extends StatefulWidget {
   const CreateSupplyPage({
@@ -55,8 +55,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
   bool _isLoading = false;
   bool _useTemplate = false;
-  bool _isBrowsingItems = false;
-  bool _isBrowsingWarehouses = false;
   String _templateName = '';
   final _templateNameController = TextEditingController();
   int _templateSts = 0;
@@ -70,22 +68,81 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   final _receivedController = TextEditingController();
   final _column1Controller = TextEditingController();
 
-  // Employee IDs (for API submission)
-  int _preparedById = 0;
-  String _approvedById = '';
-  String _receivedById = '';
-
   // Column metadata from API (tbl0)
   final Map<String, _ColumnMeta> _columnMeta = {};
 
-  // State to keep track of expansion tiles
-  bool _signatureInfoExpanded = false;
+  // Detail items maintained on the same page as the header
+  List<SupplyDetailItem> _detailItems = [];
+
+  // Some nested sections are expected to stay visible even when backend metadata is missing
+  static const Set<String> _fallbackVisibleCols = {
+    'Signature Information',
+    'Prepared',
+    'Approved',
+    'Received',
+  };
 
   bool _isVisible(String colName) {
     final m = _columnMeta[colName];
-    if (m == null) return false; // strict: only show when meta says visible
-    return m.colVisible == 1;
+    if (m == null) {
+      return _fallbackVisibleCols.contains(colName);
+    }
+    if (m.colVisible == 1) {
+      return true;
+    }
+    return _fallbackVisibleCols.contains(colName);
   }
+
+  SupplyDetailItem _cloneDetailItem(SupplyDetailItem item) {
+    return SupplyDetailItem(
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      qty: item.qty,
+      unit: item.unit,
+      lotNumber: item.lotNumber,
+      heatNumber: item.heatNumber,
+      description: item.description,
+    );
+  }
+
+  SupplyDetailItem _createEmptyDetailItem() {
+    return SupplyDetailItem(
+      itemCode: '',
+      itemName: '',
+      qty: 0,
+      unit: '',
+      lotNumber: '',
+      heatNumber: '',
+      description: '',
+    );
+  }
+
+  void _addDetailItem() {
+    setState(() {
+      _detailItems = [..._detailItems, _createEmptyDetailItem()];
+    });
+  }
+
+  void _updateDetailItem(int index, SupplyDetailItem updated) {
+    if (index < 0 || index >= _detailItems.length) return;
+    setState(() {
+      _detailItems[index] = updated;
+    });
+  }
+
+  void _removeDetailItem(int index) {
+    if (index < 0 || index >= _detailItems.length) return;
+    setState(() {
+      _detailItems.removeAt(index);
+      if (_detailItems.isEmpty) {
+        _detailItems = [_createEmptyDetailItem()];
+      }
+    });
+  }
+
+  int get _totalDetailItemCount => _detailItems.length;
+
+  double get _totalDetailQty => _detailItems.fold<double>(0, (sum, item) => sum + item.qty);
 
   void _hydrateFromHeader(SupplyHeader header) {
     _supplyIdController.text = header.supplyId.toString();
@@ -111,17 +168,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     _templateNameController.text = header.templateName;
     _preparedByController.text = header.preparedBy.toString();
     _preparedController.text = header.prepared;
-    _approvedByController.text = header.approvedBy.toString();
+    _approvedByController.text = header.approvedBy;
     _approvedController.text = header.approved;
-    _receivedByController.text = header.receivedBy.toString();
+    _receivedByController.text = header.receivedBy;
     _receivedController.text = header.received;
     _column1Controller.text = header.column1.toString();
-    
-    // Set the employee IDs when in edit mode
-    _preparedById = header.preparedBy;
-    _approvedById = header.approvedBy;
-    _receivedById = header.receivedBy;
-    
     setState(() {});
   }
 
@@ -151,11 +202,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   @override
   void initState() {
     super.initState();
-    _preparedById = 0;
-    _approvedById = '';
-    _receivedById = '';
-    _signatureInfoExpanded = false; // Default to collapsed
-    
+    _detailItems = widget.initialDetailItems.isNotEmpty
+        ? widget.initialDetailItems.map(_cloneDetailItem).toList()
+        : [_createEmptyDetailItem()];
     if (widget.isEdit) {
       if (widget.columnMetaRows != null) {
         _columnMeta
@@ -176,6 +225,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
   @override
   void dispose() {
+    _supplyIdController.dispose();
     _supplyNumberController.dispose();
     _supplyFromController.dispose();
     _supplyToController.dispose();
@@ -248,45 +298,39 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             : null;
 
         if (headerJson != null) {
-            // Be defensive, fill only when present
-            final header = SupplyHeader.fromJson(headerJson);
-            _supplyIdController.text = header.supplyId.toString();
-            _supplyNumberController.text = header.supplyNo;
-            _supplyDate = header.supplyDate;
-            _supplyFromController.text = header.fromId;
-            _supplyToController.text = header.toId;
-            // From Org / To Org removed from UI
-            _orderIdController.text = header.orderId.toString();
-            _orderNoController.text = header.orderNo;
-            _projectNoController.text = header.projectNo;
-            _orderSeqIdController.text = header.orderSeqId.toString();
-            _itemCodeController.text = header.itemCode;
-            _itemNameController.text = header.itemName;
-            _qtyOrderController.text = header.qty?.toString() ?? '';
-            _orderUnitController.text = header.orderUnit;
-            _lotNumberController.text = header.lotNumber;
-            _heatNoController.text = header.heatNumber;
-            _sizeController.text = header.size;
-            _refNoController.text = header.refNo;
-            _remarksController.text = header.remarks;
-            _templateSts = header.templateSts;
-            _templateName = header.templateName;
-            _templateNameController.text = header.templateName;
-            _preparedByController.text = header.preparedBy.toString();
-            _preparedController.text = header.prepared;
-            _approvedByController.text = header.approvedBy.toString();
-            _approvedController.text = header.approved;
-            _receivedByController.text = header.receivedBy.toString();
-            _receivedController.text = header.received;
-            _column1Controller.text = header.column1.toString();
-            
-            // Set the employee IDs when initializing with a header
-            _preparedById = header.preparedBy;
-            _approvedById = header.approvedBy;
-            _receivedById = header.receivedBy;
-            
-            setState(() {});
-          }
+          // Be defensive, fill only when present
+          final header = SupplyHeader.fromJson(headerJson);
+          _supplyIdController.text = header.supplyId.toString();
+          _supplyNumberController.text = header.supplyNo;
+          _supplyDate = header.supplyDate;
+          _supplyFromController.text = header.fromId;
+          _supplyToController.text = header.toId;
+          // From Org / To Org removed from UI
+          _orderIdController.text = header.orderId.toString();
+          _orderNoController.text = header.orderNo;
+          _projectNoController.text = header.projectNo;
+          _orderSeqIdController.text = header.orderSeqId.toString();
+          _itemCodeController.text = header.itemCode;
+          _itemNameController.text = header.itemName;
+          _qtyOrderController.text = header.qty?.toString() ?? '';
+          _orderUnitController.text = header.orderUnit;
+          _lotNumberController.text = header.lotNumber;
+          _heatNoController.text = header.heatNumber;
+          _sizeController.text = header.size;
+          _refNoController.text = header.refNo;
+          _remarksController.text = header.remarks;
+          _templateSts = header.templateSts;
+          _templateName = header.templateName;
+          _templateNameController.text = header.templateName;
+          _preparedByController.text = header.preparedBy.toString();
+          _preparedController.text = header.prepared;
+          _approvedByController.text = header.approvedBy;
+          _approvedController.text = header.approved;
+          _receivedByController.text = header.receivedBy;
+          _receivedController.text = header.received;
+          _column1Controller.text = header.column1.toString();
+          setState(() {});
+        }
       } else {
         _showErrorMessage(result['message'] ?? 'Failed to initialize new supply');
       }
@@ -314,15 +358,32 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   Future<void> _saveHeaderAndProceed() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final detailPayload = _detailItems
+        .where((item) =>
+            item.itemCode.trim().isNotEmpty ||
+            item.itemName.trim().isNotEmpty ||
+            item.unit.trim().isNotEmpty ||
+            item.lotNumber.trim().isNotEmpty ||
+            item.heatNumber.trim().isNotEmpty ||
+            item.description.trim().isNotEmpty ||
+            item.qty != 0)
+        .map(_cloneDetailItem)
+        .toList();
+
+    if (detailPayload.isEmpty) {
+      _showErrorMessage('Please add at least one detail item.');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       // Optionally call an API to persist header first (if needed).
-      // For now we proceed to detail page, carrying header data object.
+      // For now we gather header + detail data on the same screen.
 
       final header = SupplyHeader(
         supplyId: widget.isEdit
             ? int.tryParse(_supplyIdController.text.trim()) ?? 0
-            : 0, // Still use the ID if in edit mode, otherwise 0 for new record
+            : 0, // replace with returned ID if API call returns it
         supplyNo: _supplyNumberController.text.trim(),
         supplyDate: _supplyDate,
         fromId: _supplyFromController.text.trim(),
@@ -345,28 +406,26 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         templateName: _templateNameController.text.trim().isNotEmpty
             ? _templateNameController.text.trim()
             : _templateName,
-        preparedBy: _preparedById,  // Use the stored ID instead of parsing from controller
+        preparedBy: int.tryParse(_preparedByController.text.trim()) ?? 0,
         prepared: _preparedController.text.trim(),
-        approvedBy: _approvedById,  // Use the stored ID instead of parsing from controller
+        approvedBy: _approvedByController.text.trim(),
         approved: _approvedController.text.trim(),
-        receivedBy: _receivedById,  // Use the stored ID instead of parsing from controller
+        receivedBy: _receivedByController.text.trim(),
         received: _receivedController.text.trim(),
         column1: int.tryParse(_column1Controller.text.trim()) ?? 0,
       );
+      debugPrint('Saving supply with ${detailPayload.length} detail items');
 
-      // Navigate to detail page and replace current header page
       if (!mounted) return;
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SupplyDetailPage(
-            header: header,
-            initialItems: widget.initialDetailItems,
-          ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Header & details saved (stub)'),
+          backgroundColor: AppColors.success,
         ),
       );
+      Navigator.pop(context, true);
     } catch (e) {
-      _showErrorMessage('Failed to proceed to detail: $e');
+      _showErrorMessage('Failed to save supply: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -381,1062 +440,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         backgroundColor: AppColors.error,
       ),
     );
-  }
-
-  Future<void> _browseWarehouse({required bool isFrom}) async {
-    if (_isBrowsingWarehouses) return;
-    FocusScope.of(context).unfocus();
-    setState(() => _isBrowsingWarehouses = true);
-
-    bool overlayShown = false;
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    try {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-      overlayShown = true;
-
-      final browseResult = await ApiService.browseWarehouses(companyId: 1);
-
-      if (!mounted) {
-        if (overlayShown) {
-          try {
-            navigator.pop();
-          } catch (_) {}
-        }
-        return;
-      }
-
-      if (overlayShown) {
-        navigator.pop();
-        overlayShown = false;
-      }
-
-      if (browseResult['success'] != true) {
-        final message = browseResult['message'] as String? ?? 'Tidak dapat memuat data gudang';
-        _showErrorMessage(message);
-        return;
-      }
-
-      final data = browseResult['data'];
-      if (data is! Map<String, dynamic>) {
-        _showErrorMessage('Data gudang tidak tersedia');
-        return;
-      }
-
-      final items = _extractRows(data);
-      if (items.isEmpty) {
-        _showErrorMessage('Data gudang tidak tersedia');
-        return;
-      }
-
-      // Extract column metadata if available in the response
-      final columnMeta = <String, _ColumnMeta>{};
-      final List? tbl0 = data['tbl0'] as List?;
-      if (tbl0 != null) {
-        columnMeta
-          ..clear()
-          ..addEntries(
-            tbl0
-                .whereType<Map>()
-                .map((e) => e.cast<String, dynamic>())
-                .map((m) => _ColumnMeta.fromJson(m))
-                .map((m) => MapEntry(m.colName, m)),
-          );
-      }
-
-      // Filter items based on column visibility (excluding tb10 data as requested)
-      final visibleItems = items.map((item) {
-        final filteredItem = <String, dynamic>{};
-        for (final entry in item.entries) {
-          final colName = entry.key;
-          final colMeta = columnMeta[colName];
-          // Only include the field if it's visible (ColVisible == 1) or if there's no metadata for it
-          if (colMeta == null || colMeta.colVisible == 1) {
-            filteredItem[colName] = entry.value;
-          }
-        }
-        return filteredItem;
-      }).toList();
-
-      final selected = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context,
-        isScrollControlled: true,
-        builder: (sheetContext) {
-          return FractionallySizedBox(
-            heightFactor: 0.7,
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 4,
-                    width: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final title = _getStringValue(
-                              row,
-                              const [
-                                'Warehouse_Name',
-                                'WarehouseName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
-                              ],
-                              partialMatches: const ['warehouse', 'gudang', 'colname', 'name'],
-                            ) ??
-                            'Warehouse ${index + 1}';
-                        final code = _getStringValue(
-                          row,
-                          const [
-                            'Warehouse_Code',
-                            'WarehouseCode',
-                            'Code',
-                            'Warehouse_ID',
-                            'WarehouseId',
-                            'ID',
-                            'colCode',
-                            'colcode',
-                          ],
-                          partialMatches: const ['warehousecode', 'gudang', 'code'],
-                        );
-                        final location = _getStringValue(
-                          row,
-                          const [
-                            'Location',
-                            'Address',
-                            'City',
-                            'colLocation',
-                            'collocation',
-                            'colAddr',
-                          ],
-                          partialMatches: const ['lokasi', 'location', 'address', 'city'],
-                        );
-
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayName', () => title)
-                          ..putIfAbsent('_displayCode', () => code);
-
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (location != null) details.add(location);
-
-                        return ListTile(
-                          title: Text(title),
-                          subtitle: details.isEmpty ? null : Text(details.join(' • ')),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-
-      if (!mounted || selected == null) return;
-
-      _applyWarehouseSelection(selected, isFrom: isFrom);
-    } catch (e) {
-      if (!mounted) return;
-      if (overlayShown) {
-        try {
-          navigator.pop();
-        } catch (_) {}
-        overlayShown = false;
-      }
-      _showErrorMessage('Gagal membuka data gudang: $e');
-    } finally {
-      if (mounted) {
-        if (overlayShown) {
-          try {
-            navigator.pop();
-          } catch (_) {}
-        }
-        setState(() => _isBrowsingWarehouses = false);
-      } else {
-        _isBrowsingWarehouses = false;
-      }
-    }
-  }
-
-  void _applyWarehouseSelection(Map<String, dynamic> data, {required bool isFrom}) {
-    final controller = isFrom ? _supplyFromController : _supplyToController;
-    final code = _getStringValue(
-      data,
-      const [
-        'Warehouse_Code',
-        'WarehouseCode',
-        'Code',
-        'Warehouse_ID',
-        'WarehouseId',
-        'ID',
-        'colCode',
-        'colcode',
-      ],
-      partialMatches: const ['warehousecode', 'gudang', 'code'],
-    );
-    final name = _getStringValue(
-      data,
-      const [
-        'Warehouse_Name',
-        'WarehouseName',
-        'Name',
-        'Description',
-        'colName',
-        'colname',
-        'ColName',
-        'Colname',
-        'colName1',
-        'colname1',
-      ],
-      partialMatches: const ['warehouse', 'gudang', 'colname', 'name'],
-    );
-
-    final chosen = code ?? name ?? _stringifyValue(data['_displayName']);
-    final trimmed = chosen?.trim();
-    if (trimmed == null || trimmed.isEmpty) return;
-    if (controller.text.trim() == trimmed) return;
-
-    controller.text = trimmed;
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _browseItemName() async {
-    if (_isBrowsingItems) return;
-    FocusScope.of(context).unfocus();
-    setState(() => _isBrowsingItems = true);
-
-    bool overlayShown = false;
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    try {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-      overlayShown = true;
-
-      final browseResult = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
-
-      if (!mounted) return;
-
-      if (overlayShown) {
-        navigator.pop();
-        overlayShown = false;
-      }
-
-      if (browseResult['success'] != true) {
-        final message = browseResult['message'] as String? ?? 'Tidak dapat memuat data item';
-        _showErrorMessage(message);
-        return;
-      }
-
-      final data = browseResult['data'];
-      if (data is! Map<String, dynamic>) {
-        _showErrorMessage('Data item tidak tersedia');
-        return;
-      }
-
-      final items = _extractRows(data);
-      if (items.isEmpty) {
-        _showErrorMessage('Data item tidak tersedia');
-        return;
-      }
-
-      // Extract column metadata if available in the response
-      final columnMeta = <String, _ColumnMeta>{};
-      final List? tbl0 = data['tbl0'] as List?;
-      if (tbl0 != null) {
-        columnMeta
-          ..clear()
-          ..addEntries(
-            tbl0
-                .whereType<Map>()
-                .map((e) => e.cast<String, dynamic>())
-                .map((m) => _ColumnMeta.fromJson(m))
-                .map((m) => MapEntry(m.colName, m)),
-          );
-      }
-
-      // Filter items based on column visibility (excluding tb10 data as requested)
-      final visibleItems = items.map((item) {
-        final filteredItem = <String, dynamic>{};
-        for (final entry in item.entries) {
-          final colName = entry.key;
-          final colMeta = columnMeta[colName];
-          // Only include the field if it's visible (ColVisible == 1) or if there's no metadata for it
-          if (colMeta == null || colMeta.colVisible == 1) {
-            filteredItem[colName] = entry.value;
-          }
-        }
-        return filteredItem;
-      }).toList();
-
-      final selected = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context,
-        isScrollControlled: true,
-        builder: (sheetContext) {
-          return FractionallySizedBox(
-            heightFactor: 0.85,
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 4,
-                    width: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Browse Item Stock',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final title = _getStringValue(
-                              row,
-                              const [
-                                'Item_Name',
-                                'ItemName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
-                                'Column1',
-                                'Column_1',
-                              ],
-                              partialMatches: const ['itemname', 'description', 'colname', 'namestock', 'namabarang'],
-                            ) ??
-                            _getStringValue(
-                              row,
-                              const [],
-                              partialMatches: const ['name', 'desc', 'barang', 'produk'],
-                            ) ??
-                            'Item ${index + 1}';
-                        final code = _getStringValue(
-                          row,
-                          const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode'],
-                          partialMatches: const ['itemcode', 'kode', 'code'],
-                        );
-                        final lot = _getStringValue(
-                          row,
-                          const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-                          partialMatches: const ['lot', 'batch'],
-                        );
-                        final qty = _getStringValue(
-                          row,
-                          const [
-                            'Qty',
-                            'Quantity',
-                            'Qty_Available',
-                            'Qty_Order',
-                            'Balance',
-                            'Unit_Stock',
-                            'Stock',
-                          ],
-                          partialMatches: const ['qty', 'quantity', 'jumlah', 'balance', 'stock'],
-                        );
-                        final unit = _getStringValue(
-                          row,
-                          const ['Unit', 'Unit_Stock', 'UOM'],
-                          partialMatches: const ['unit', 'uom', 'stockunit'],
-                        );
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayName', () => title);
-
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (lot != null) details.add('Lot: $lot');
-                        if (qty != null) details.add('Qty: $qty');
-                        if (unit != null) details.add(unit);
-
-                        return ListTile(
-                          title: Text(title),
-                          subtitle: details.isEmpty ? null : Text(details.join(' • ')),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-
-      if (!mounted || selected == null) return;
-
-      final detail = await _fetchItemDetail(selected);
-      final dataToApply = detail ?? selected;
-      _applyItemSelection(dataToApply);
-    } catch (e) {
-      if (!mounted) return;
-      if (overlayShown) {
-        try {
-          navigator.pop();
-        } catch (_) {}
-        overlayShown = false;
-      }
-      _showErrorMessage('Gagal membuka data item: $e');
-    } finally {
-      if (mounted) {
-        if (overlayShown) {
-          try {
-            navigator.pop();
-          } catch (_) {}
-        }
-        setState(() => _isBrowsingItems = false);
-      } else {
-        _isBrowsingItems = false;
-      }
-    }
-  }
-
-  Future<Map<String, dynamic>?> _fetchItemDetail(Map<String, dynamic> selected) async {
-    dynamic id = _getFirstValue(
-      selected,
-      const ['ID', 'Id', 'Item_ID', 'ItemId'],
-      partialMatches: const ['itemid', 'stockid', 'browseid'],
-    );
-    dynamic seq = _getFirstValue(
-      selected,
-      const ['Seq', 'SEQ', 'Sequence', 'Lot_Seq'],
-      partialMatches: const ['seq', 'sequence', 'lotseq'],
-    );
-
-    final idAsString = _stringifyValue(id);
-    final seqAsString = _stringifyValue(seq);
-
-    var normalizedId = idAsString;
-    var normalizedSeq = seqAsString;
-
-    if (normalizedSeq == null && normalizedId != null && normalizedId.contains('@')) {
-      final parts = normalizedId
-          .split('@')
-          .map((part) => part.trim())
-          .where((part) => part.isNotEmpty)
-          .toList();
-      if (parts.length >= 2) {
-        normalizedId = parts.first;
-        normalizedSeq = parts.last;
-      }
-    }
-
-    normalizedSeq ??= _stringifyValue(
-      _getFirstValue(
-        selected,
-        const ['WH_ID', 'Warehouse_ID', 'WarehouseId'],
-        partialMatches: const ['warehouseid', 'whid'],
-      ),
-    );
-
-    normalizedId ??= _stringifyValue(
-      _getFirstValue(
-        selected,
-        const ['ItemIdx', 'Idx', 'Row_ID', 'RowId'],
-        partialMatches: const ['itemidx', 'rowid', 'idx'],
-      ),
-    );
-
-    normalizedId ??= idAsString;
-
-    if (normalizedId == null || normalizedSeq == null) {
-      return null;
-    }
-
-    try {
-      final result = await ApiService.showItemStockByLot(
-        id: normalizedId,
-        seq: normalizedSeq,
-        companyId: 1,
-      );
-
-      if (result['success'] != true) {
-        final message = result['message'] as String?;
-        if (message != null) {
-          _showErrorMessage(message);
-        }
-        return null;
-      }
-
-      final data = result['data'];
-      if (data is Map<String, dynamic>) {
-        return _extractFirstRow(data);
-      }
-    } catch (e) {
-      _showErrorMessage('Gagal memuat detail item: $e');
-    }
-
-    return null;
-  }
-
-  List<Map<String, dynamic>> _extractRows(Map<String, dynamic> payload) {
-    final rows = <Map<String, dynamic>>[];
-
-    Map<int, String>? parseFieldDefinitions(List<dynamic> fields) {
-      final mapping = <int, String>{};
-
-      for (var index = 0; index < fields.length; index++) {
-        final entry = fields[index];
-        String? fieldName;
-
-        if (entry is Map) {
-          for (final element in entry.entries) {
-            final normalized = _normalizeKey(element.key);
-            if (normalized == 'colname' ||
-                normalized == 'columnname' ||
-                normalized == 'fieldname' ||
-                normalized == 'name' ||
-                normalized == 'caption' ||
-                normalized == 'colcaption') {
-              fieldName = _stringifyValue(element.value);
-              if (fieldName != null) break;
-            }
-          }
-
-          fieldName ??= _stringifyValue(entry['title']);
-        } else if (entry is String) {
-          fieldName = _stringifyValue(entry);
-        }
-
-        if (fieldName != null && fieldName.isNotEmpty) {
-          mapping[index] = fieldName;
-        }
-      }
-
-      return mapping.isEmpty ? null : mapping;
-    }
-
-    void walk(dynamic node, {Map<int, String>? activeFields}) {
-      if (node is Map) {
-        Map<int, String>? localFields = activeFields;
-
-        for (final entry in node.entries) {
-          final value = entry.value;
-          if (value is List) {
-            final normalizedKey = _normalizeKey(entry.key);
-            if (normalizedKey == 'tbl0' || normalizedKey.contains('field')) {
-              final parsed = parseFieldDefinitions(value);
-              if (parsed != null) {
-                localFields = {
-                  if (localFields != null) ...localFields,
-                  ...parsed,
-                };
-              }
-              if (normalizedKey == 'tbl0') {
-                continue;
-              }
-            }
-          }
-        }
-
-        for (final entry in node.entries) {
-          final value = entry.value;
-          if (value is List) {
-            final normalizedKey = _normalizeKey(entry.key);
-            if (normalizedKey == 'tbl0' || normalizedKey.contains('field')) {
-              continue;
-            }
-          }
-          walk(entry.value, activeFields: localFields);
-        }
-
-        return;
-      }
-
-      if (node is List) {
-        if (node.isEmpty) return;
-
-        for (final element in node) {
-          if (element is Map) {
-            rows.add(element.map((key, value) => MapEntry(key.toString(), value)));
-          } else if (element is List) {
-            final mapped = <String, dynamic>{};
-            for (var index = 0; index < element.length; index++) {
-              final key = activeFields != null && activeFields.containsKey(index)
-                  ? activeFields[index]!
-                  : 'col${index + 1}';
-              mapped[key] = element[index];
-            }
-            rows.add(mapped);
-          }
-        }
-      }
-    }
-
-    walk(payload);
-    return rows;
-  }
-
-  Map<String, dynamic>? _extractFirstRow(Map<String, dynamic> payload) {
-    final rows = _extractRows(payload);
-    return rows.isNotEmpty ? rows.first : null;
-  }
-
-  String _normalizeKey(String key) {
-    return key.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase();
-  }
-
-  bool _matchesNormalizedKey(String key, Set<String> targets) {
-    if (targets.contains(key)) return true;
-    for (final target in targets) {
-      if (target.length > 2 && key.endsWith(target)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  String? _stringifyValue(dynamic value) {
-    if (value == null) return null;
-    if (value is String) {
-      final trimmed = value.trim();
-      return trimmed.isEmpty ? null : trimmed;
-    }
-    if (value is num || value is bool) {
-      return value.toString();
-    }
-    final stringified = value.toString().trim();
-    return stringified.isEmpty ? null : stringified;
-  }
-
-  dynamic _getFirstValue(
-    Map<String, dynamic> data,
-    List<String> keys, {
-    List<String> partialMatches = const [],
-  }) {
-    if (data.isEmpty) return null;
-
-    final normalizedTargets =
-        keys.map(_normalizeKey).where((element) => element.isNotEmpty).toSet();
-
-    for (final entry in data.entries) {
-      final normalizedKey = _normalizeKey(entry.key);
-      if (!_matchesNormalizedKey(normalizedKey, normalizedTargets)) continue;
-      final value = entry.value;
-      if (value == null) continue;
-      final stringValue = value.toString().trim();
-      if (stringValue.isEmpty) continue;
-      return value;
-    }
-
-    if (partialMatches.isNotEmpty) {
-      final partialTargets = partialMatches
-          .map(_normalizeKey)
-          .where((element) => element.isNotEmpty)
-          .toList();
-
-      for (final entry in data.entries) {
-        final normalizedKey = _normalizeKey(entry.key);
-        final matches = partialTargets
-            .any((target) => target.isNotEmpty && normalizedKey.contains(target));
-        if (!matches) continue;
-        final value = entry.value;
-        if (value == null) continue;
-        final stringValue = value.toString().trim();
-        if (stringValue.isEmpty) continue;
-        return value;
-      }
-    }
-
-    return null;
-  }
-
-  String? _getStringValue(
-    Map<String, dynamic> data,
-    List<String> keys, {
-    List<String> partialMatches = const [],
-  }) {
-    final value = _getFirstValue(
-      data,
-      keys,
-      partialMatches: partialMatches,
-    );
-    return _stringifyValue(value);
-  }
-
-  void _applyItemSelection(Map<String, dynamic> data) {
-    var changed = false;
-
-    void setValue(TextEditingController controller, String? value) {
-      final trimmed = value?.trim();
-      if (trimmed == null || trimmed.isEmpty) return;
-      if (controller.text == trimmed) return;
-      controller.text = trimmed;
-      changed = true;
-    }
-
-    setValue(
-      _itemNameController,
-      _getStringValue(
-            data,
-            const [
-              'Item_Name',
-              'ItemName',
-              'Name',
-              'Description',
-              'colName',
-              'colname',
-              'ColName',
-              'Colname',
-              'colName1',
-              'colname1',
-              'Column1',
-              'Column_1',
-            ],
-            partialMatches: const ['itemname', 'description', 'colname', 'namestock', 'namabarang'],
-          ) ??
-          _stringifyValue(data['_displayName']),
-    );
-    setValue(
-      _itemCodeController,
-      _getStringValue(
-        data,
-        const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode'],
-        partialMatches: const ['itemcode', 'kode', 'code'],
-      ),
-    );
-    setValue(
-      _lotNumberController,
-      _getStringValue(
-        data,
-        const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-        partialMatches: const ['lot', 'batch'],
-      ),
-    );
-    setValue(
-      _heatNoController,
-      _getStringValue(
-        data,
-        const ['Heat_No', 'HeatNo', 'Heat_Number'],
-        partialMatches: const ['heat'],
-      ),
-    );
-    setValue(
-      _sizeController,
-      _getStringValue(
-        data,
-        const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
-        partialMatches: const ['size', 'dimension'],
-      ),
-    );
-    setValue(
-      _orderUnitController,
-      _getStringValue(
-        data,
-        const ['Unit', 'Item_Unit', 'UOM'],
-        partialMatches: const ['unit', 'uom'],
-      ),
-    );
-    setValue(
-      _qtyOrderController,
-      _getStringValue(
-        data,
-        const [
-          'Qty',
-          'Quantity',
-          'Qty_Available',
-          'Qty_Order',
-          'Balance',
-          'Unit_Stock',
-          'Stock',
-        ],
-        partialMatches: const ['qty', 'quantity', 'jumlah', 'balance', 'stock'],
-      ),
-    );
-
-    if (changed && mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _browseEmployee({required String field}) async {
-    FocusScope.of(context).unfocus();
-    setState(() => _isLoading = true);
-
-    try {
-      final browseResult = await ApiService.browseEmployees(companyId: 1);
-
-      if (!mounted) return;
-
-      if (browseResult['success'] != true) {
-        final message = browseResult['message'] as String? ?? 'Tidak dapat memuat data karyawan';
-        _showErrorMessage(message);
-        return;
-      }
-
-      final data = browseResult['data'];
-      if (data is! Map<String, dynamic>) {
-        _showErrorMessage('Data karyawan tidak tersedia');
-        return;
-      }
-
-      final items = _extractRows(data);
-      if (items.isEmpty) {
-        _showErrorMessage('Data karyawan tidak tersedia');
-        return;
-      }
-
-      // Extract column metadata if available in the response
-      final columnMeta = <String, _ColumnMeta>{};
-      final List? tbl0 = data['tbl0'] as List?;
-      if (tbl0 != null) {
-        columnMeta
-          ..clear()
-          ..addEntries(
-            tbl0
-                .whereType<Map>()
-                .map((e) => e.cast<String, dynamic>())
-                .map((m) => _ColumnMeta.fromJson(m))
-                .map((m) => MapEntry(m.colName, m)),
-          );
-      }
-
-      // Filter items based on column visibility (excluding tb10 data as requested)
-      final visibleItems = items.map((item) {
-        final filteredItem = <String, dynamic>{};
-        for (final entry in item.entries) {
-          final colName = entry.key;
-          final colMeta = columnMeta[colName];
-          // Only include the field if it's visible (ColVisible == 1) or if there's no metadata for it
-          if (colMeta == null || colMeta.colVisible == 1) {
-            filteredItem[colName] = entry.value;
-          }
-        }
-        return filteredItem;
-      }).toList();
-
-      final selected = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context,
-        isScrollControlled: true,
-        builder: (sheetContext) {
-          return FractionallySizedBox(
-            heightFactor: 0.7,
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 4,
-                    width: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Pilih $field',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final name = _getStringValue(
-                              row,
-                              const [
-                                'Employee_Name',
-                                'EmployeeName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
-                              ],
-                              partialMatches: const ['employee', 'name', 'colname', 'nama'],
-                            ) ??
-                            'Karyawan ${index + 1}';
-                        final code = _getStringValue(
-                          row,
-                          const [
-                            'Employee_Code',
-                            'EmployeeCode',
-                            'Code',
-                            'Employee_ID',
-                            'EmployeeId',
-                            'ID',
-                            'colCode',
-                            'colcode',
-                          ],
-                          partialMatches: const ['employeecode', 'karyawan', 'code', 'id'],
-                        );
-                        final position = _getStringValue(
-                          row,
-                          const [
-                            'Position',
-                            'Job_Position',
-                            'JobPosition',
-                            'Department',
-                            'Dept',
-                          ],
-                          partialMatches: const ['position', 'job', 'dept', 'departemen'],
-                        );
-
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayName', () => name)
-                          ..putIfAbsent('_displayCode', () => code);
-
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (position != null) details.add(position);
-
-                        return ListTile(
-                          title: Text(name),
-                          subtitle: details.isEmpty ? null : Text(details.join(' • ')),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-
-      if (!mounted || selected == null) return;
-
-      _applyEmployeeSelection(selected, field: field);
-    } catch (e) {
-      if (!mounted) return;
-      _showErrorMessage('Gagal membuka data karyawan: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      } else {
-        _isLoading = false;
-      }
-    }
-  }
-
-  void _applyEmployeeSelection(Map<String, dynamic> data, {required String field}) {
-    final id = _getFirstValue(
-      data,
-      const [
-        'Employee_ID',
-        'EmployeeId',
-        'ID',
-      ],
-      partialMatches: const ['employeeid', 'id', 'identifier'],
-    );
-    final code = _getStringValue(
-      data,
-      const [
-        'Employee_Code',
-        'EmployeeCode',
-        'Code',
-        'colCode',
-        'colcode',
-      ],
-      partialMatches: const ['employeecode', 'karyawan', 'code'],
-    );
-    final name = _getStringValue(
-      data,
-      const [
-        'Employee_Name',
-        'EmployeeName',
-        'Name',
-        'Description',
-        'colName',
-        'colname',
-        'ColName',
-        'Colname',
-        'colName1',
-        'colname1',
-      ],
-      partialMatches: const ['employee', 'name', 'colname', 'nama'],
-    );
-
-    // Use name for display, but ID for API submission
-    final displayValue = name ?? code ?? _stringifyValue(data['_displayName']);
-    final idValue = id?.toString();
-    
-    final trimmedDisplay = displayValue?.trim();
-    if (trimmedDisplay == null || trimmedDisplay.isEmpty) return;
-
-    switch(field) {
-      case 'Prepared By':
-        if (_preparedByController.text.trim() != trimmedDisplay) {
-          _preparedByController.text = trimmedDisplay;
-          _preparedById = idValue != null ? int.tryParse(idValue) ?? 0 : 0;
-          if (mounted) setState(() {});
-        }
-        break;
-      case 'Approved By':
-        if (_approvedByController.text.trim() != trimmedDisplay) {
-          _approvedByController.text = trimmedDisplay;
-          _approvedById = idValue ?? '';
-          if (mounted) setState(() {});
-        }
-        break;
-      case 'Received By':
-        if (_receivedByController.text.trim() != trimmedDisplay) {
-          _receivedByController.text = trimmedDisplay;
-          _receivedById = idValue ?? '';
-          if (mounted) setState(() {});
-        }
-        break;
-    }
   }
 
   @override
@@ -1548,8 +551,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 ],
                               ),
                             if (_isVisible('Supply Number') || _isVisible('Supply Date')) const SizedBox(height: 16),
-                            
-                            const SizedBox(height: 16),
+
                             if (_isVisible('Supply From') || _isVisible('Supply To'))
                               Row(
                                 children: [
@@ -1557,15 +559,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                     Expanded(
                                       child: TextFormField(
                                         controller: _supplyFromController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: true),
+                                        readOnly: _isReadOnly('Supply From'),
                                         decoration: _inputDecoration(
                                           'Supply From',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          readOnly: _isReadOnly('Supply From'),
                                         ),
                                       ),
                                     ),
@@ -1575,15 +572,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                     Expanded(
                                       child: TextFormField(
                                         controller: _supplyToController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: false),
+                                        readOnly: _isReadOnly('Supply To'),
                                         decoration: _inputDecoration(
                                           'Supply To',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          readOnly: _isReadOnly('Supply To'),
                                         ),
                                       ),
                                     ),
@@ -1689,14 +681,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                       child: TextFormField(
                                         controller: _itemNameController,
                                         readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: _browseItemName,
                                         decoration: _inputDecoration(
                                           'Item Name',
                                           readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
                                         ),
                                       ),
                                     ),
@@ -1764,32 +751,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 ],
                               ),
                             if (_isVisible('Unit') || _isVisible('Size')) const SizedBox(height: 16),
-                            if (_isVisible('Lot No') || _isVisible('Reference No.'))
+                            if (_isVisible('Lot No'))
                               Row(
                                 children: [
-                                  if (_isVisible('Lot No'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _lotNumberController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _lotNumberController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Lot No',
                                         readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Lot No',
-                                          readOnly: true,
-                                        ),
                                       ),
                                     ),
-                                  if (_isVisible('Lot No') && _isVisible('Reference No.')) const SizedBox(width: 16),
-                                  if (_isVisible('Reference No.'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _refNoController,
-                                        readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Reference No.',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
+                                  ),
                                 ],
                               ),
                           ],
@@ -1863,74 +837,53 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         'Signature Information',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      initiallyExpanded: _signatureInfoExpanded,
-                      onExpansionChanged: (bool expanded) {
-                        setState(() {
-                          _signatureInfoExpanded = expanded;
-                        });
-                      },
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
-                              if (_isVisible('Prepared By'))
+                              if (_isVisible('Prepared'))
                                 Row(
                                   children: [
                                     Expanded(
                                       child: TextFormField(
-                                        controller: _preparedByController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Prepared By'),
+                                        controller: _preparedController,
+                                        readOnly: _isReadOnly('Prepared'),
                                         decoration: _inputDecoration(
-                                          'Prepared By',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          'Prepared',
+                                          readOnly: _isReadOnly('Prepared'),
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              if (_isVisible('Prepared By')) const SizedBox(height: 16),
-                              if (_isVisible('Approved By'))
+                              if (_isVisible('Prepared')) const SizedBox(height: 16),
+                              if (_isVisible('Approved'))
                                 Row(
                                   children: [
                                     Expanded(
                                       child: TextFormField(
-                                        controller: _approvedByController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Approved By'),
+                                        controller: _approvedController,
+                                        readOnly: _isReadOnly('Approved'),
                                         decoration: _inputDecoration(
-                                          'Approved By',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          'Approved',
+                                          readOnly: _isReadOnly('Approved'),
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              if (_isVisible('Approved By')) const SizedBox(height: 16),
-                              if (_isVisible('Received By'))
+                              if (_isVisible('Approved')) const SizedBox(height: 16),
+                              if (_isVisible('Received'))
                                 Row(
                                   children: [
                                     Expanded(
                                       child: TextFormField(
-                                        controller: _receivedByController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Received By'),
+                                        controller: _receivedController,
+                                        readOnly: _isReadOnly('Received'),
                                         decoration: _inputDecoration(
-                                          'Received By',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          'Received',
+                                          readOnly: _isReadOnly('Received'),
                                         ),
                                       ),
                                     ),
@@ -1967,11 +920,126 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                 ],
               ),
             ),
-            // Optional info note under the header
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Card(
+                child: ExpansionTile(
+                  title: const Text(
+                    'Detail Items',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  initiallyExpanded: true,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _isLoading ? null : _addDetailItem,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Item'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 1224),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceLight,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: const [
+                                        SizedBox(
+                                          width: 160,
+                                          child: Text('Item Code', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 240,
+                                          child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 80,
+                                          child: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 80,
+                                          child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 160,
+                                          child: Text('Lot Number', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 160,
+                                          child: Text('Heat Number', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 240,
+                                          child: Text('Description', style: TextStyle(fontWeight: FontWeight.w600)),
+                                        ),
+                                        SizedBox(width: 48),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  for (final entry in _detailItems.asMap().entries) ...[
+                                    if (entry.key != 0) const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: 1200,
+                                      child: DetailItemRow(
+                                        key: ValueKey('detail_row_${entry.key}'),
+                                        item: entry.value,
+                                        onChanged: (updated) => _updateDetailItem(entry.key, updated),
+                                        onDelete: _isLoading ? null : () => _removeDetailItem(entry.key),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Total Item: $_totalDetailItemCount',
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                      const SizedBox(width: 24),
+                                      Text(
+                                        'Total Qty: ${_totalDetailQty.toStringAsFixed(2)}',
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Text(
-                'After saving the header, you will be redirected to the Detail page.',
+                'Fill the header and detail information, then tap SAVE to submit.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -1982,6 +1050,202 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         ),
       ),
       ),
+    );
+  }
+}
+
+class DetailItemRow extends StatefulWidget {
+  const DetailItemRow({
+    super.key,
+    required this.item,
+    required this.onChanged,
+    this.onDelete,
+    this.readOnly = false,
+  });
+
+  final SupplyDetailItem item;
+  final ValueChanged<SupplyDetailItem> onChanged;
+  final VoidCallback? onDelete;
+  final bool readOnly;
+
+  @override
+  State<DetailItemRow> createState() => _DetailItemRowState();
+}
+
+class _DetailItemRowState extends State<DetailItemRow> {
+  late final TextEditingController _itemCodeController;
+  late final TextEditingController _itemNameController;
+  late final TextEditingController _qtyController;
+  late final TextEditingController _unitController;
+  late final TextEditingController _lotNumberController;
+  late final TextEditingController _heatNumberController;
+  late final TextEditingController _descriptionController;
+
+  @override
+  void initState() {
+    super.initState();
+    _itemCodeController = TextEditingController(text: widget.item.itemCode);
+    _itemNameController = TextEditingController(text: widget.item.itemName);
+    _qtyController = TextEditingController(text: _formatQty(widget.item.qty));
+    _unitController = TextEditingController(text: widget.item.unit);
+    _lotNumberController = TextEditingController(text: widget.item.lotNumber);
+    _heatNumberController = TextEditingController(text: widget.item.heatNumber);
+    _descriptionController = TextEditingController(text: widget.item.description);
+  }
+
+  @override
+  void didUpdateWidget(covariant DetailItemRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item != widget.item) {
+      _itemCodeController.text = widget.item.itemCode;
+      _itemNameController.text = widget.item.itemName;
+      _qtyController.text = _formatQty(widget.item.qty);
+      _unitController.text = widget.item.unit;
+      _lotNumberController.text = widget.item.lotNumber;
+      _heatNumberController.text = widget.item.heatNumber;
+      _descriptionController.text = widget.item.description;
+    }
+  }
+
+  @override
+  void dispose() {
+    _itemCodeController.dispose();
+    _itemNameController.dispose();
+    _qtyController.dispose();
+    _unitController.dispose();
+    _lotNumberController.dispose();
+    _heatNumberController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  String _formatQty(double qty) {
+    if (qty == 0) return '';
+    if ((qty - qty.roundToDouble()).abs() < 0.0001) {
+      return qty.toStringAsFixed(0);
+    }
+    return qty.toStringAsFixed(2);
+  }
+
+  void _emitChange() {
+    widget.onChanged(
+      SupplyDetailItem(
+        itemCode: _itemCodeController.text.trim(),
+        itemName: _itemNameController.text.trim(),
+        qty: double.tryParse(_qtyController.text.trim().replaceAll(',', '.')) ?? 0,
+        unit: _unitController.text.trim(),
+        lotNumber: _lotNumberController.text.trim(),
+        heatNumber: _heatNumberController.text.trim(),
+        description: _descriptionController.text.trim(),
+      ),
+    );
+  }
+
+  InputDecoration _decoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+      isDense: true,
+      filled: true,
+      fillColor: widget.readOnly ? AppColors.readOnlyYellow : AppColors.surfaceCard,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: _itemCodeController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Item Code'),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 3,
+          child: TextFormField(
+            controller: _itemNameController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Item Name'),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 1,
+          child: TextFormField(
+            controller: _qtyController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Qty'),
+            textAlign: TextAlign.right,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 1,
+          child: TextFormField(
+            controller: _unitController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Unit'),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: _lotNumberController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Lot Number'),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: _heatNumberController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Heat Number'),
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 3,
+          child: TextFormField(
+            controller: _descriptionController,
+            readOnly: widget.readOnly,
+            decoration: _decoration('Description'),
+            maxLines: 2,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => _emitChange(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 48,
+          child: IconButton(
+            onPressed: widget.readOnly ? null : widget.onDelete,
+            icon: const Icon(Icons.delete_outline),
+            color: AppColors.error,
+            tooltip: 'Remove item',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2031,3 +1295,7 @@ class _ColumnMeta {
     );
   }
 }
+
+
+
+

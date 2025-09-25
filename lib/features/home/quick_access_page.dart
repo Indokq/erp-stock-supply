@@ -77,8 +77,17 @@ class QuickAccessPage extends StatelessWidget {
                             const SizedBox(height: 12),
                             LayoutBuilder(
                               builder: (context, constraints) {
-                                final columns = constraints.maxWidth < 600 ? 2 : 3;
-                                final aspectRatio = constraints.maxWidth < 600 ? 0.95 : 1.0;
+                                final width = constraints.maxWidth;
+                                final int columns = width < 360
+                                    ? 1
+                                    : width < 600
+                                        ? 2
+                                        : 3;
+                                final double aspectRatio = width < 360
+                                    ? 1.25 // taller tiles on very small phones
+                                    : width < 600
+                                        ? 0.95
+                                        : 1.0;
                                 return GridView.builder(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
