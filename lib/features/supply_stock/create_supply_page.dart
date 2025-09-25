@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
+import '../shared/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'models/supply_header.dart';
 import 'models/supply_detail_item.dart';
@@ -33,6 +34,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   final _supplyNumberController = TextEditingController();
   final _supplyFromController = TextEditingController();
   final _supplyToController = TextEditingController();
+  int? _fromWarehouseId;
+  int? _toWarehouseId;
   // Removed From Org / To Org per requirement
   DateTime _supplyDate = DateTime.now();
 
@@ -72,6 +75,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   int _preparedById = 0;
   String _approvedById = '';
   String _receivedById = '';
+
+  String _formatDateDdMmmYyyy(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final dd = d.day.toString().padLeft(2, '0');
+    final mmm = months[d.month - 1];
+    final yyyy = d.year.toString();
+    return '$dd-$mmm-$yyyy';
+  }
 
   // Column metadata from API (tbl0)
   final Map<String, _ColumnMeta> _columnMeta = {};
@@ -155,6 +169,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     _supplyDate = header.supplyDate;
     _supplyFromController.text = header.fromId;
     _supplyToController.text = header.toId;
+    _fromWarehouseId = int.tryParse(header.fromId);
+    _toWarehouseId = int.tryParse(header.toId);
     _orderIdController.text = header.orderId.toString();
     _orderNoController.text = header.orderNo;
     _projectNoController.text = header.projectNo;
@@ -171,11 +187,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     _templateSts = header.templateSts;
     _templateName = header.templateName;
     _templateNameController.text = header.templateName;
-    _preparedByController.text = header.preparedBy.toString();
+    // Display employee names (not IDs) in Signature Information
+    _preparedByController.text = header.prepared;
     _preparedController.text = header.prepared;
-    _approvedByController.text = header.approvedBy;
+    _approvedByController.text = header.approved;
     _approvedController.text = header.approved;
-    _receivedByController.text = header.receivedBy;
+    _receivedByController.text = header.received;
     _receivedController.text = header.received;
     _column1Controller.text = header.column1.toString();
     
@@ -236,6 +253,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     } else {
       _initializeNewSupply();
     }
+
+    // After initial load, set Prepared display to current user if empty
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final current = AuthService.currentUser?.trim();
+      if (current != null && current.isNotEmpty) {
+        if (_preparedByController.text.trim().isEmpty) {
+          _preparedByController.text = current;
+          _preparedController.text = current;
+        }
+      }
+    });
   }
 
   @override
@@ -320,6 +348,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             _supplyDate = header.supplyDate;
             _supplyFromController.text = header.fromId;
             _supplyToController.text = header.toId;
+            _fromWarehouseId = int.tryParse(header.fromId);
+            _toWarehouseId = int.tryParse(header.toId);
             // From Org / To Org removed from UI
             _orderIdController.text = header.orderId.toString();
             _orderNoController.text = header.orderNo;
@@ -337,11 +367,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             _templateSts = header.templateSts;
             _templateName = header.templateName;
             _templateNameController.text = header.templateName;
-            _preparedByController.text = header.preparedBy.toString();
+            // Display employee names (not IDs) in Signature Information
+            _preparedByController.text = header.prepared;
             _preparedController.text = header.prepared;
-            _approvedByController.text = header.approvedBy;
+            _approvedByController.text = header.approved;
             _approvedController.text = header.approved;
-            _receivedByController.text = header.receivedBy;
+            _receivedByController.text = header.received;
             _receivedController.text = header.received;
             _column1Controller.text = header.column1.toString();
             
@@ -379,78 +410,129 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   Future<void> _saveHeaderAndProceed() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final detailPayload = _detailItems
-        .where((item) =>
-            item.itemCode.trim().isNotEmpty ||
-            item.itemName.trim().isNotEmpty ||
-            item.unit.trim().isNotEmpty ||
-            item.lotNumber.trim().isNotEmpty ||
-            item.heatNumber.trim().isNotEmpty ||
-            item.description.trim().isNotEmpty ||
-            item.qty != 0)
-        .map(_cloneDetailItem)
-        .toList();
-
-    if (detailPayload.isEmpty) {
-      _showErrorMessage('Please add at least one detail item.');
+    // Validate minimal header for save
+    if (_fromWarehouseId == null || _toWarehouseId == null) {
+      _showErrorMessage('Pilih gudang From dan To terlebih dahulu.');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // Optionally call an API to persist header first (if needed).
-      // For now we gather header + detail data on the same screen.
+      final isEdit = widget.isEdit;
+      final supplyId = isEdit ? int.tryParse(_supplyIdController.text.trim()) ?? 0 : 0;
+      final supplyNo = _supplyNumberController.text.trim();
+      final supplyDateFmt = _formatDateDdMmmYyyy(_supplyDate); // e.g. 04-Mar-2025
+      final fromId = _fromWarehouseId!;
+      final toId = _toWarehouseId!;
+      final orderId = int.tryParse(_orderIdController.text.trim()) ?? 0;
+      final orderSeq = (_orderSeqIdController.text.trim().isEmpty)
+          ? '0'
+          : _orderSeqIdController.text.trim();
+      final refNo = _refNoController.text.trim();
+      final remarks = _remarksController.text.trim();
+      final templateSts = _templateSts;
+      final templateName = _templateNameController.text.trim().isNotEmpty
+          ? _templateNameController.text.trim()
+          : _templateName;
 
-      final header = SupplyHeader(
-        supplyId: widget.isEdit
-            ? int.tryParse(_supplyIdController.text.trim()) ?? 0
-            : 0, // replace with returned ID if API call returns it
-        supplyNo: _supplyNumberController.text.trim(),
-        supplyDate: _supplyDate,
-        fromId: _supplyFromController.text.trim(),
-        // From Org / To Org removed from UI
-        toId: _supplyToController.text.trim(),
-        orderId: int.tryParse(_orderIdController.text.trim()) ?? 0,
-        orderNo: _orderNoController.text.trim(),
-        projectNo: _projectNoController.text.trim(),
-        orderSeqId: int.tryParse(_orderSeqIdController.text.trim()) ?? 0,
-        itemCode: _itemCodeController.text.trim(),
-        itemName: _itemNameController.text.trim(),
-        qty: double.tryParse(_qtyOrderController.text.trim().replaceAll(',', '.')),
-        orderUnit: _orderUnitController.text.trim(),
-        lotNumber: _lotNumberController.text.trim(),
-        heatNumber: _heatNoController.text.trim(),
-        size: _sizeController.text.trim(),
-        refNo: _refNoController.text.trim(),
-        remarks: _remarksController.text.trim(),
-        templateSts: _templateSts,
-        templateName: _templateNameController.text.trim().isNotEmpty
-            ? _templateNameController.text.trim()
-            : _templateName,
-        preparedBy: _preparedById,  // Use the stored ID instead of parsing from controller
-        prepared: _preparedController.text.trim(),
-        approvedBy: _approvedById,  // Use the stored ID instead of parsing from controller
-        approved: _approvedController.text.trim(),
-        receivedBy: _receivedById,  // Use the stored ID instead of parsing from controller
-        received: _receivedController.text.trim(),
-        column1: int.tryParse(_column1Controller.text.trim()) ?? 0,
+      var preparedBy = _preparedById == 0 ? null : _preparedById;
+      if (preparedBy == null && (AuthService.currentUser?.toLowerCase() == 'admin')) {
+        preparedBy = 1; // default admin employee ID fallback
+      }
+      // If no preparedBy selected, default to current user (if numeric known)
+      if (preparedBy == null) {
+        final user = AuthService.currentUser;
+        // if backend requires ID, we leave NULL; otherwise name used in header already
+        // keep preparedBy as null to avoid wrong ID
+      }
+      final approvedBy = _approvedById.isEmpty ? null : int.tryParse(_approvedById);
+      final receivedBy = _receivedById.isEmpty ? null : int.tryParse(_receivedById);
+
+      final result = await ApiService.saveSupplyHeader(
+        supplyCls: 1,
+        supplyId: supplyId,
+        supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+        supplyDateDdMmmYyyy: supplyDateFmt,
+        fromId: fromId,
+        toId: toId,
+        orderId: orderId,
+        orderSeq: orderSeq,
+        refNo: refNo,
+        remarks: remarks.isEmpty ? '' : remarks,
+        templateSts: templateSts,
+        templateName: templateName,
+        preparedBy: preparedBy,
+        approvedBy: approvedBy,
+        receivedBy: receivedBy,
+        companyId: 1,
+        userEntry: 'admin',
       );
-      debugPrint('Saving supply with ${detailPayload.length} detail items');
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Header & details saved (stub)'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.pop(context, true);
-    } catch (e) {
-      _showErrorMessage('Failed to save supply: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+
+      if (result['success'] == true) {
+        int? newId;
+        try {
+          final data = result['data'] as Map<String, dynamic>;
+          final tbl0 = data['tbl0'] as List?;
+          if (tbl0 != null && tbl0.isNotEmpty) {
+            final first = (tbl0.first as Map).cast<String, dynamic>();
+            final resultMsg = first['Result']?.toString();
+            // Try to parse ID from Result or other fields
+            final idField = first['Supply_ID'] ?? first['ID'] ?? first['SupplyId'];
+            newId = idField is int ? idField : int.tryParse(idField?.toString() ?? '');
+            if (newId == null && resultMsg != null) {
+              final match = RegExp(r"ID\s*[:=]\s*(\d+)").firstMatch(resultMsg);
+              if (match != null) {
+                newId = int.tryParse(match.group(1)!);
+              }
+            }
+          }
+        } catch (_) {}
+
+        // Save each detail row if we have an ID
+        if (newId != null) {
+          _supplyIdController.text = newId.toString();
+          for (final item in _detailItems) {
+            final code = item.itemCode.trim();
+            final qty = item.qty;
+            if (code.isEmpty || qty == 0) continue;
+            // Unit_ID is optional; attempt numeric parse from unit text if possible
+            final unitId = int.tryParse(item.unit.trim());
+            final detailRes = await ApiService.saveSupplyDetail(
+              supplyId: newId,
+              seqId: '0',
+              itemId: int.tryParse(code) ?? 0, // If code is not purely numeric, backend may handle
+              qty: qty,
+              unitId: unitId,
+              lotNumber: item.lotNumber.trim(),
+              heatNumber: item.heatNumber.trim(),
+              size: item.size.trim(),
+              description: item.description.trim(),
+              userEntry: 'admin',
+            );
+            if (detailRes['success'] != true) {
+              _showErrorMessage(detailRes['message'] ?? 'Failed to save detail');
+              // Continue saving remaining details
+            }
+          }
+        }
+
+        final msg = newId != null ? 'Saved. Header ID: $newId' : 'Header saved successfully';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        _showErrorMessage(result['message'] ?? 'Failed to save header');
       }
+    } catch (e) {
+      _showErrorMessage('Failed to save supply header: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -692,18 +774,35 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       partialMatches: const ['warehouse', 'gudang', 'colname', 'name'],
     );
 
-    final chosen = code ?? name ?? _stringifyValue(data['_displayName']);
+    final chosen = name ?? code ?? _stringifyValue(data['_displayName']);
     final trimmed = chosen?.trim();
     if (trimmed == null || trimmed.isEmpty) return;
     if (controller.text.trim() == trimmed) return;
 
     controller.text = trimmed;
+    final id = _getFirstValue(
+      data,
+      const [
+        'Warehouse_ID', 'WarehouseId', 'WH_ID', 'ID'
+      ],
+      partialMatches: const ['warehouseid', 'whid', 'id'],
+    );
+    final idStr = _stringifyValue(id);
+    final idInt = int.tryParse(idStr ?? '');
+    if (isFrom) {
+      _fromWarehouseId = idInt;
+    } else {
+      _toWarehouseId = idInt;
+    }
     if (mounted) {
       setState(() {});
     }
   }
 
-  List<Map<String, dynamic>> _extractRows(Map<String, dynamic> payload) {
+  List<Map<String, dynamic>> _extractRows(
+    Map<String, dynamic> payload, {
+    Set<String> excludeTables = const <String>{},
+  }) {
     final rows = <Map<String, dynamic>>[];
 
     Map<int, String>? parseFieldDefinitions(List<dynamic> fields) {
@@ -748,8 +847,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           final value = entry.value;
           if (value is List) {
             final normalizedKey = _normalizeKey(entry.key);
-            // Skip field definitions (tbl0) and any tb10 content
-            if (normalizedKey == 'tbl0' || normalizedKey == 'tb10' || normalizedKey.contains('field')) {
+            // Skip field definitions (tbl0) and any excluded tables
+            if (normalizedKey == 'tbl0' || excludeTables.contains(normalizedKey) || normalizedKey.contains('field')) {
               final parsed = parseFieldDefinitions(value);
               if (parsed != null) {
                 localFields = {
@@ -757,7 +856,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   ...parsed,
                 };
               }
-              if (normalizedKey == 'tbl0' || normalizedKey == 'tb10') {
+              if (normalizedKey == 'tbl0' || excludeTables.contains(normalizedKey)) {
                 continue;
               }
             }
@@ -768,8 +867,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           final value = entry.value;
           if (value is List) {
             final normalizedKey = _normalizeKey(entry.key);
-            // Skip traversing into tbl0 (fields) and tb10 as requested
-            if (normalizedKey == 'tbl0' || normalizedKey == 'tb10' || normalizedKey.contains('field')) {
+            // Skip traversing into tbl0 (fields) and any excluded tables
+            if (normalizedKey == 'tbl0' || excludeTables.contains(normalizedKey) || normalizedKey.contains('field')) {
               continue;
             }
           }
@@ -915,7 +1014,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         return;
       }
 
-      final items = _extractRows(data);
+      final items = _extractRows(data, excludeTables: {'tb10'});
       if (items.isEmpty) {
         _showErrorMessage('Data order entry tidak tersedia');
         return;
@@ -1784,6 +1883,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   }
 
   void _applyItemSelection(Map<String, dynamic> data) {
+    // Apply selection to header hint fields
     var changed = false;
 
     void setValue(TextEditingController controller, String? value) {
@@ -1875,6 +1975,118 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
     if (changed && mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _browseItemStockByLotForRow(int rowIndex) async {
+    FocusScope.of(context).unfocus();
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
+      if (!mounted) return;
+      if (result['success'] != true) {
+        _showErrorMessage(result['message'] ?? 'Tidak dapat memuat data item stock');
+        return;
+      }
+      final data = result['data'];
+      if (data is! Map<String, dynamic>) {
+        _showErrorMessage('Data item stock tidak tersedia');
+        return;
+      }
+      final items = _extractRows(data);
+      if (items.isEmpty) {
+        _showErrorMessage('Data item stock tidak tersedia');
+        return;
+      }
+
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('Browse Item Stock', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final row = items[index];
+                        final title = _getStringValue(
+                              row,
+                              const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                              partialMatches: const ['itemname','description','colname','namestock','namabarang'],
+                            ) ?? 'Item ${index + 1}';
+                        final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']);
+                        final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']);
+                        final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
+                        final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
+                        final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']);
+
+                        final details = <String>[];
+                        if (code != null) details.add(code);
+                        if (lot != null) details.add('Lot: $lot');
+                        if (unit != null) details.add(unit);
+                        if (qty != null) details.add('Qty: $qty');
+                        if (heat != null) details.add('Heat: $heat');
+
+                        return ListTile(
+                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                          subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                          onTap: () => Navigator.of(sheetContext).pop(row),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      if (!mounted || selected == null) return;
+
+      // Map selection into the target row
+      final updated = _detailItems[rowIndex].copyWith(
+        itemCode: _getStringValue(selected, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']) ?? _detailItems[rowIndex].itemCode,
+        itemName: _getStringValue(selected, const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'], partialMatches: const ['itemname','description','colname','namestock','namabarang']) ?? _detailItems[rowIndex].itemName,
+        lotNumber: _getStringValue(selected, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']) ?? _detailItems[rowIndex].lotNumber,
+        heatNumber: _getStringValue(selected, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']) ?? _detailItems[rowIndex].heatNumber,
+        unit: _getStringValue(selected, const ['Unit','Item_Unit','UOM','Unit_Stock'], partialMatches: const ['unit','uom','stockunit']) ?? _detailItems[rowIndex].unit,
+        qty: double.tryParse((_getStringValue(selected, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']) ?? '').replaceAll(',', '.')) ?? _detailItems[rowIndex].qty,
+        description: _getStringValue(selected, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? _detailItems[rowIndex].description,
+      );
+      _updateDetailItem(rowIndex, updated);
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorMessage('Gagal membuka data item stock: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1998,9 +2210,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
+                                        onTap: () => _browseWarehouse(isFrom: true),
                                         decoration: _inputDecoration(
                                           'Supply From',
                                           readOnly: true,
+                                        ).copyWith(
+                                          suffixIcon: const Icon(Icons.warehouse_outlined),
                                         ),
                                       ),
                                     ),
@@ -2013,9 +2228,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
+                                        onTap: () => _browseWarehouse(isFrom: false),
                                         decoration: _inputDecoration(
                                           'Supply To',
                                           readOnly: true,
+                                        ).copyWith(
+                                          suffixIcon: const Icon(Icons.warehouse_outlined),
                                         ),
                                       ),
                                     ),
@@ -2054,7 +2272,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                           'Order No.',
                                           readOnly: true,
                                         ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          suffixIcon: const Icon(Icons.assignment_outlined),
                                         ),
                                       ),
                                     ),
@@ -2298,12 +2516,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Prepared'),
+                                        onTap: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                            ? () => _browseEmployee(field: 'Prepared')
+                                            : null,
                                         decoration: _inputDecoration(
                                           'Prepared',
                                           readOnly: true,
                                         ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          suffixIcon: Icon(
+                                            Icons.person_outline,
+                                            color: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                                ? null
+                                                : Colors.grey,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2319,12 +2544,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Approved'),
+                                        onTap: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                            ? () => _browseEmployee(field: 'Approved')
+                                            : null,
                                         decoration: _inputDecoration(
                                           'Approved',
                                           readOnly: true,
                                         ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          suffixIcon: Icon(
+                                            Icons.person_outline,
+                                            color: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                                ? null
+                                                : Colors.grey,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2340,12 +2572,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseEmployee(field: 'Received'),
+                                        onTap: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                            ? () => _browseEmployee(field: 'Received')
+                                            : null,
                                         decoration: _inputDecoration(
                                           'Received',
                                           readOnly: true,
                                         ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
+                                          suffixIcon: Icon(
+                                            Icons.person_outline,
+                                            color: (AuthService.currentUser?.toLowerCase() == 'admin')
+                                                ? null
+                                                : Colors.grey,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2470,6 +2709,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         item: entry.value,
                                         onChanged: (updated) => _updateDetailItem(entry.key, updated),
                                         onDelete: _isLoading ? null : () => _removeDetailItem(entry.key),
+                                        onBrowse: _isLoading ? null : () => _browseItemStockByLotForRow(entry.key),
                                       ),
                                     ),
                                   ],
@@ -2522,12 +2762,14 @@ class DetailItemRow extends StatefulWidget {
     required this.item,
     required this.onChanged,
     this.onDelete,
+    this.onBrowse,
     this.readOnly = false,
   });
 
   final SupplyDetailItem item;
   final ValueChanged<SupplyDetailItem> onChanged;
   final VoidCallback? onDelete;
+  final VoidCallback? onBrowse;
   final bool readOnly;
 
   @override
@@ -2623,7 +2865,13 @@ class _DetailItemRowState extends State<DetailItemRow> {
           child: TextFormField(
             controller: _itemCodeController,
             readOnly: widget.readOnly,
-            decoration: _decoration('Item Code'),
+            decoration: _decoration('Item Code').copyWith(
+              suffixIcon: IconButton(
+                tooltip: 'Browse Item Stock',
+                icon: const Icon(Icons.inventory),
+                onPressed: widget.readOnly ? null : widget.onBrowse,
+              ),
+            ),
             textInputAction: TextInputAction.next,
             onChanged: (_) => _emitChange(),
           ),

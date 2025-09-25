@@ -488,6 +488,163 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> saveSupplyHeader({
+    required int supplyCls,
+    required int supplyId,
+    required String supplyNo,
+    required String supplyDateDdMmmYyyy,
+    required int fromId,
+    required int toId,
+    required int orderId,
+    required String orderSeq,
+    required String refNo,
+    required String remarks,
+    required int templateSts,
+    required String templateName,
+    required int? preparedBy,
+    required int? approvedBy,
+    required int? receivedBy,
+    required int companyId,
+    required String userEntry,
+  }) async {
+    String _q(String s) => "'${s.replaceAll("'", "''")}'";
+    String _qn(String? s) => s == null || s.isEmpty ? 'NULL' : _q(s);
+    String _n(int? v) => v == null ? 'NULL' : v.toString();
+
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spInv_StockSupply_SaveHeader "
+            "@Supply_Cls = ${supplyCls}, "
+            "@Supply_ID = ${_q(supplyId.toString())}, "
+            "@Supply_No = ${_q(supplyNo)}, "
+            "@Supply_Date = ${_q(supplyDateDdMmmYyyy)}, "
+            "@From_ID = ${fromId}, "
+            "@To_ID = ${toId}, "
+            "@Order_ID = ${orderId}, "
+            "@Order_Seq = ${_q(orderSeq)}, "
+            "@Ref_No = ${_q(refNo)}, "
+            "@Remarks = ${_q(remarks)}, "
+            "@Template_Sts = ${templateSts}, "
+            "@Template_Name = ${_q(templateName)}, "
+            "@Prepared_By = ${_n(preparedBy)}, "
+            "@Approved_By = ${_n(approvedBy)}, "
+            "@Received_By = ${_n(receivedBy)}, "
+            "@Company_ID = ${_q(companyId.toString())}, "
+            "@User_Entry = ${_q(userEntry)}"
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to save supply header with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveSupplyDetail({
+    required int supplyId,
+    required String seqId,
+    required int itemId,
+    required double qty,
+    required int? unitId,
+    required String lotNumber,
+    required String heatNumber,
+    required String size,
+    required String description,
+    required String userEntry,
+  }) async {
+    String _q(String s) => "'${s.replaceAll("'", "''")}'";
+    String _qn(String? s) => s == null || s.isEmpty ? 'NULL' : _q(s);
+    String _n(int? v) => v == null ? 'NULL' : v.toString();
+
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spInv_StockSupply_SaveDetail "
+            "@Supply_ID = ${supplyId}, "
+            "@Seq_ID = ${_q(seqId)}, "
+            "@Item_ID = ${itemId}, "
+            "@Qty = ${qty}, "
+            "@Unit_ID = ${_n(unitId)}, "
+            "@Lot_Number = ${_q(lotNumber)}, "
+            "@Heat_Number = ${_q(heatNumber)}, "
+            "@Size = ${_q(size)}, "
+            "@Description = ${_q(description)}, "
+            "@User_Entry = ${_q(userEntry)}"
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {'success': false, 'message': message.replaceAll('ERR@', '').trim()};
+        }
+        return {'success': true, 'data': responseData};
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to save supply detail with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   static Future<Map<String, dynamic>> browseEmployees({
     int? id,
     int companyId = 1,
