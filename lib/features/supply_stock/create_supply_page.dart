@@ -748,7 +748,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           final value = entry.value;
           if (value is List) {
             final normalizedKey = _normalizeKey(entry.key);
-            if (normalizedKey == 'tbl0' || normalizedKey.contains('field')) {
+            // Skip field definitions (tbl0) and any tb10 content
+            if (normalizedKey == 'tbl0' || normalizedKey == 'tb10' || normalizedKey.contains('field')) {
               final parsed = parseFieldDefinitions(value);
               if (parsed != null) {
                 localFields = {
@@ -756,7 +757,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   ...parsed,
                 };
               }
-              if (normalizedKey == 'tbl0') {
+              if (normalizedKey == 'tbl0' || normalizedKey == 'tb10') {
                 continue;
               }
             }
@@ -767,7 +768,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           final value = entry.value;
           if (value is List) {
             final normalizedKey = _normalizeKey(entry.key);
-            if (normalizedKey == 'tbl0' || normalizedKey.contains('field')) {
+            // Skip traversing into tbl0 (fields) and tb10 as requested
+            if (normalizedKey == 'tbl0' || normalizedKey == 'tb10' || normalizedKey.contains('field')) {
               continue;
             }
           }
@@ -1095,6 +1097,77 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       ],
       partialMatches: const ['projectno', 'noproject', 'project', 'number'],
     );
+    final orderId = _getStringValue(
+      data,
+      const [
+        'Order_ID',
+        'OrderId',
+        'ID_Order',
+        'ID',
+      ],
+      partialMatches: const ['orderid', 'idorder'],
+    );
+    final seqId = _getStringValue(
+      data,
+      const [
+        'Seq_ID',
+        'SeqId',
+        'Sequence',
+        'Order_Seq',
+        'Item_Seq',
+      ],
+      partialMatches: const ['seq', 'sequence', 'orderseq', 'itemseq'],
+    );
+    final itemCode = _getStringValue(
+      data,
+      const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode'],
+      partialMatches: const ['itemcode', 'kode', 'code'],
+    );
+    final itemName = _getStringValue(
+      data,
+      const [
+        'Item_Name',
+        'ItemName',
+        'Name',
+        'Description',
+        'colName',
+        'colname',
+        'ColName',
+        'Colname',
+        'colName1',
+        'colname1',
+      ],
+      partialMatches: const ['itemname', 'description', 'colname', 'namestock', 'namabarang'],
+    );
+    final qtyOrder = _getStringValue(
+      data,
+      const [
+        'Qty_Order',
+        'Qty',
+        'Quantity',
+      ],
+      partialMatches: const ['qty', 'quantity', 'jumlah'],
+    );
+    final unit = _getStringValue(
+      data,
+      const ['Unit', 'UOM', 'Order_Unit', 'Unit_Stock'],
+      partialMatches: const ['unit', 'uom', 'orderunit'],
+    );
+    final lotNumber = _getStringValue(
+      data,
+      const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+      partialMatches: const ['lot', 'batch'],
+    );
+    final heatNo = _getStringValue(
+      data,
+      const ['Heat_No', 'HeatNo', 'Heat_Number'],
+      partialMatches: const ['heat', 'heatno'],
+    );
+    final size = _getStringValue(
+      data,
+      const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
+      partialMatches: const ['size', 'dimension'],
+    );
 
     if (orderNo != null && orderNo.isNotEmpty) {
       _orderNoController.text = orderNo;
@@ -1104,7 +1177,45 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       _projectNoController.text = projectNo;
     }
 
-    if (orderNo != null || projectNo != null) {
+    if (orderId != null && orderId.isNotEmpty) {
+      _orderIdController.text = orderId;
+    }
+    if (seqId != null && seqId.isNotEmpty) {
+      _orderSeqIdController.text = seqId;
+    }
+    if (itemCode != null && itemCode.isNotEmpty) {
+      _itemCodeController.text = itemCode;
+    }
+    if (itemName != null && itemName.isNotEmpty) {
+      _itemNameController.text = itemName;
+    }
+    if (qtyOrder != null && qtyOrder.isNotEmpty) {
+      _qtyOrderController.text = qtyOrder;
+    }
+    if (unit != null && unit.isNotEmpty) {
+      _orderUnitController.text = unit;
+    }
+    if (lotNumber != null && lotNumber.isNotEmpty) {
+      _lotNumberController.text = lotNumber;
+    }
+    if (heatNo != null && heatNo.isNotEmpty) {
+      _heatNoController.text = heatNo;
+    }
+    if (size != null && size.isNotEmpty) {
+      _sizeController.text = size;
+    }
+
+    if (orderNo != null ||
+        projectNo != null ||
+        orderId != null ||
+        seqId != null ||
+        itemCode != null ||
+        itemName != null ||
+        qtyOrder != null ||
+        unit != null ||
+        lotNumber != null ||
+        heatNo != null ||
+        size != null) {
       if (mounted) setState(() {});
     }
   }
@@ -1887,12 +1998,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: true),
                                         decoration: _inputDecoration(
                                           'Supply From',
                                           readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
                                         ),
                                       ),
                                     ),
@@ -1905,12 +2013,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: false),
                                         decoration: _inputDecoration(
                                           'Supply To',
                                           readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
                                         ),
                                       ),
                                     ),
@@ -2023,12 +2128,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                         readOnly: true,
                                         showCursor: false,
                                         enableInteractiveSelection: false,
-                                        onTap: _browseItemStockByLot,
                                         decoration: _inputDecoration(
                                           'Item Name',
                                           readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.search),
                                         ),
                                       ),
                                     ),
