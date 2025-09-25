@@ -4,6 +4,8 @@ import 'models/supply_header.dart';
 import 'create_supply_page.dart' as create_supply;
 import 'models/supply_detail_item.dart';
 import '../shared/widgets/shared_cards.dart';
+import '../shared/services/api_service.dart';
+import '../shared/services/auth_service.dart';
 
 class EditSupplyPage extends StatefulWidget {
   const EditSupplyPage({
@@ -32,6 +34,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   final _supplyFromController = TextEditingController();
   final _supplyToController = TextEditingController();
   DateTime _supplyDate = DateTime.now();
+  // Track selected warehouse IDs while showing names
+  String? _supplyFromId;
+  String? _supplyToId;
 
   // Order Information
   final _orderNoController = TextEditingController();
@@ -141,11 +146,543 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     _supplyIdController.text = header.supplyId.toString();
     _supplyNumberController.text = header.supplyNo;
     _supplyDate = header.supplyDate;
-    _supplyFromController.text = header.fromId;
-    _supplyToController.text = header.toId;
+    // Show names instead of IDs
+    _supplyFromId = header.fromId.isNotEmpty ? header.fromId : null;
+    _supplyToId = header.toId.isNotEmpty ? header.toId : null;
+    _supplyFromController.text = header.fromOrg.isNotEmpty ? header.fromOrg : header.fromId;
+    _supplyToController.text = header.toOrg.isNotEmpty ? header.toOrg : header.toId;
     _refNoController.text = header.refNo;
     _remarksController.text = header.remarks;
     _templateNameController.text = header.templateName;
+    // Audit
+    _preparedByController.text = header.preparedBy.toString();
+    _preparedController.text = header.prepared;
+    _approvedByController.text = header.approvedBy;
+    _approvedController.text = header.approved;
+    _receivedByController.text = header.receivedBy;
+    _receivedController.text = header.received;
+    setState(() {});
+  }
+
+  Future<void> _pickWarehouse({required bool isFrom}) async {
+    if (widget.readOnly) return;
+    try {
+      final result = await ApiService.browseWarehouses(companyId: 1);
+      if (result['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Failed to browse warehouses'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      final data = result['data'] as Map<String, dynamic>;
+      final List<Map<String, dynamic>> rows = [];
+
+      // Collect rows from typical tbl buckets
+      for (var i = 0; i < 10; i++) {
+        final key = 'tbl' + i.toString();
+        final list = data[key];
+        if (list is List) {
+          for (final r in list) {
+            if (r is Map) {
+              final m = r.cast<String, dynamic>();
+              if (m.containsKey('Org_Name')) {
+                rows.add(m);
+              }
+            }
+          }
+        }
+      }
+
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No warehouses found'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) {
+          final TextEditingController searchCtrl = TextEditingController();
+          List<Map<String, dynamic>> filtered = List.of(rows);
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              void applyFilter(String q) {
+                final query = q.trim().toLowerCase();
+                setModalState(() {
+                  if (query.isEmpty) {
+                    filtered = List.of(rows);
+                  } else {
+                    filtered = rows.where((m) {
+                      final name = (m['Org_Name'] ?? '').toString().toLowerCase();
+                      final code = (m['Org_Code'] ?? '').toString().toLowerCase();
+                      return name.contains(query) || code.contains(query);
+                    }).toList();
+                  }
+                });
+              }
+
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.warehouse_outlined),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isFrom ? 'Select Supply From' : 'Select Supply To',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: searchCtrl,
+                        onChanged: applyFilter,
+                        decoration: const InputDecoration(
+                          hintText: 'Search warehouse by name or code...',
+                          prefixIcon: Icon(Icons.search_rounded),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final m = filtered[index];
+                            final name = (m['Org_Name'] ?? '').toString();
+                            final code = (m['Org_Code'] ?? '').toString();
+                            final id = (m['ID'] ?? '').toString();
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.location_on_outlined),
+                              title: Text(name),
+                              subtitle: code.isNotEmpty ? Text(code) : null,
+                              onTap: () => Navigator.pop<Map<String, dynamic>>(context, {
+                                'id': id,
+                                'name': name,
+                              }),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      if (!mounted) return;
+      if (selected != null) {
+        setState(() {
+          if (isFrom) {
+            _supplyFromId = selected['id']?.toString();
+            _supplyFromController.text = selected['name']?.toString() ?? '';
+          } else {
+            _supplyToId = selected['id']?.toString();
+            _supplyToController.text = selected['name']?.toString() ?? '';
+          }
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading warehouses: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickEmployee({required String field}) async {
+    if (widget.readOnly) return;
+    try {
+      final result = await ApiService.browseEmployees(companyId: 1);
+      if (result['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Failed to browse employees'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      final data = result['data'] as Map<String, dynamic>;
+      final List<Map<String, dynamic>> rows = [];
+
+      for (var i = 0; i < 10; i++) {
+        final key = 'tbl' + i.toString();
+        final list = data[key];
+        if (list is List) {
+          for (final r in list) {
+            if (r is Map) rows.add(r.cast<String, dynamic>());
+          }
+        }
+      }
+
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No employees found'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      String _pickName(Map<String, dynamic> m) {
+        for (final k in const [
+          'Employee_Name', 'EmployeeName', 'Name', 'Description', 'FullName', 'Nama',
+        ]) {
+          final v = m[k];
+          if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+        }
+        return 'Employee';
+      }
+
+      String _pickCode(Map<String, dynamic> m) {
+        for (final k in const [
+          'Employee_Code', 'EmployeeCode', 'Code', 'NIK', 'EmpCode',
+        ]) {
+          final v = m[k];
+          if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+        }
+        return '';
+      }
+
+      String _pickId(Map<String, dynamic> m) {
+        for (final k in const ['Employee_ID', 'EmployeeId', 'ID']) {
+          final v = m[k];
+          if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+        }
+        return '';
+      }
+
+      final selected = await showModalBottomSheet<Map<String, String>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) {
+          final TextEditingController searchCtrl = TextEditingController();
+          List<Map<String, dynamic>> filtered = List.of(rows);
+          void applyFilter(String q) {
+            final qq = q.toLowerCase();
+            filtered = rows.where((m) {
+              final name = _pickName(m).toLowerCase();
+              final code = _pickCode(m).toLowerCase();
+              return name.contains(qq) || code.contains(qq);
+            }).toList();
+          }
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_search_rounded),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Select $field',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: searchCtrl,
+                        onChanged: (v) => setModal(() => applyFilter(v)),
+                        decoration: const InputDecoration(
+                          hintText: 'Search by name or code...',
+                          prefixIcon: Icon(Icons.search_rounded),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final m = filtered[index];
+                            final name = _pickName(m);
+                            final code = _pickCode(m);
+                            final id = _pickId(m);
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.person_outline_rounded),
+                              title: Text(name),
+                              subtitle: code.isNotEmpty ? Text(code) : null,
+                              onTap: () => Navigator.pop<Map<String, String>>(context, {
+                                'id': id,
+                                'name': name,
+                              }),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      if (!mounted) return;
+      if (selected != null) {
+        setState(() {
+          if (field == 'Approved') {
+            _approvedByController.text = selected['id'] ?? '';
+            _approvedController.text = selected['name'] ?? '';
+          } else if (field == 'Received') {
+            _receivedByController.text = selected['id'] ?? '';
+            _receivedController.text = selected['name'] ?? '';
+          }
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading employees: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  // --- ORDER ENTRY PICKER ---
+  String _stringifyValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    return value.toString();
+  }
+
+  String? _getStringValue(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    List<String> partialMatches = const [],
+  }) {
+    for (final key in keys) {
+      final v = data[key];
+      if (v != null && _stringifyValue(v).trim().isNotEmpty) {
+        return _stringifyValue(v).trim();
+      }
+    }
+    if (partialMatches.isNotEmpty) {
+      for (final entry in data.entries) {
+        final k = entry.key.toLowerCase();
+        if (partialMatches.any((p) => k.contains(p.toLowerCase()))) {
+          final v = entry.value;
+          if (v != null && _stringifyValue(v).trim().isNotEmpty) {
+            return _stringifyValue(v).trim();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> _extractRows(Map<String, dynamic> payload) {
+    final rows = <Map<String, dynamic>>[];
+    for (var i = 0; i < 12; i++) {
+      final key = 'tbl$i';
+      final list = payload[key];
+      if (list is List) {
+        for (final r in list) {
+          if (r is Map) rows.add(r.cast<String, dynamic>());
+        }
+      }
+    }
+    return rows;
+  }
+
+  Future<void> _browseOrderEntryItem() async {
+    try {
+      final browseResult = await ApiService.browseOrderEntryItems(
+        dateStart: '2020-01-01',
+        dateEnd: '2025-12-31',
+        companyId: 1,
+      );
+
+      if (browseResult['success'] != true) {
+        final message = browseResult['message'] as String? ?? 'Failed to load order entries';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+        );
+        return;
+      }
+
+      final data = browseResult['data'];
+      if (data is! Map<String, dynamic>) return;
+      final rawItems = _extractRows(data);
+      // Only keep entries that have a non-empty Order No
+      final items = rawItems.where((row) {
+        final orderNo = _getStringValue(
+          row,
+          const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
+          partialMatches: const ['orderno', 'noorder', 'order', 'number'],
+        );
+        return (orderNo != null && orderNo.isNotEmpty);
+      }).toList();
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No order entries found'), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.assignment_outlined),
+                      SizedBox(width: 8),
+                      Text('Select Order Entry', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final row = items[index];
+                      final orderNo = _getStringValue(
+                        row,
+                        const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
+                        partialMatches: const ['orderno', 'noorder', 'order', 'number'],
+                      );
+                      final projectNo = _getStringValue(
+                        row,
+                        const ['Project_No', 'ProjectNo', 'No_Project', 'Project_Number'],
+                        partialMatches: const ['projectno', 'noproject', 'project', 'number'],
+                      );
+                      final description = _getStringValue(
+                        row,
+                        const ['Description', 'Remark', 'Notes'],
+                        partialMatches: const ['description', 'remark', 'notes', 'desc'],
+                      );
+                      final title = orderNo!;
+                      final subtitle = [
+                        if (projectNo != null && projectNo.isNotEmpty) 'Project: $projectNo',
+                        if (description != null && description.isNotEmpty) description,
+                      ].join(' • ');
+
+                      return ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.assignment), backgroundColor: Color(0xFFEAF2FF)),
+                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(sheetContext).pop(row),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (!mounted || selected == null) return;
+      _applyOrderEntrySelection(selected);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading order entries: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  void _applyOrderEntrySelection(Map<String, dynamic> data) {
+    // Order/project
+    final orderNo = _getStringValue(
+      data,
+      const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
+      partialMatches: const ['orderno', 'noorder', 'order', 'number'],
+    );
+    final projectNo = _getStringValue(
+      data,
+      const ['Project_No', 'ProjectNo', 'No_Project', 'Project_Number'],
+      partialMatches: const ['projectno', 'noproject', 'project', 'number'],
+    );
+    if (orderNo != null) _orderNoController.text = orderNo;
+    if (projectNo != null) _projectNoController.text = projectNo;
+
+    // Item related
+    final itemCode = _getStringValue(
+      data,
+      const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+      partialMatches: const ['itemcode', 'code', 'sku'],
+    );
+    final itemName = _getStringValue(
+      data,
+      const ['Item_Name', 'ItemName', 'Name', 'Title'],
+      partialMatches: const ['itemname', 'name', 'title'],
+    );
+    final qtyOrder = _getStringValue(
+      data,
+      const ['Qty', 'Qty_Order', 'Quantity'],
+      partialMatches: const ['qty', 'quantity'],
+    );
+    // Omitted OrderUnit and Lot_Number from edit view; keep UI minimal
+    final heatNumber = _getStringValue(
+      data,
+      const ['Heat_Number', 'HeatNo', 'Heat'],
+      partialMatches: const ['heat'],
+    );
+
+    if (itemCode != null) _itemCodeController.text = itemCode;
+    if (itemName != null) _itemNameController.text = itemName;
+    if (qtyOrder != null) _qtyOrderController.text = qtyOrder;
+    if (heatNumber != null) _heatNoController.text = heatNumber;
+
     setState(() {});
   }
 
@@ -199,6 +736,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Prepared: use current logged-in user if available
+    final currentUser = AuthService.currentUser;
+    if (!widget.readOnly && currentUser != null && currentUser.isNotEmpty) {
+      if (_preparedController.text != currentUser) {
+        // reflect login user as preparer
+        _preparedController.text = currentUser;
+      }
+    }
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
@@ -276,10 +821,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _supplyNumberController,
-                                                  readOnly: _isReadOnly('Supply Number'),
+                                                  readOnly: true,
                                                   decoration: _inputDecoration(
                                                     'Supply Number',
-                                                    readOnly: _isReadOnly('Supply Number'),
+                                                    readOnly: true,
                                                   ),
                                                   validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                                 ),
@@ -289,11 +834,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                             if (_isVisible('Supply Date'))
                                               Expanded(
                                                 child: InkWell(
-                                                  onTap: _isReadOnly('Supply Date') ? null : _selectDate,
+                                                  onTap: _selectDate,
                                                   child: InputDecorator(
                                                     decoration: _inputDecoration(
                                                       'Supply Date',
-                                                      readOnly: _isReadOnly('Supply Date'),
+                                                      readOnly: true,
                                                     ).copyWith(suffixIcon: const Icon(Icons.calendar_today, size: 20)),
                                                     child: Text(
                                                       '${_supplyDate.day.toString().padLeft(2, '0')}-${_supplyDate.month.toString().padLeft(2, '0')}-${_supplyDate.year}',
@@ -313,10 +858,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _supplyFromController,
-                                                  readOnly: _isReadOnly('Supply From'),
+                                                  readOnly: true,
+                                                  onTap: () => _pickWarehouse(isFrom: true),
                                                   decoration: _inputDecoration(
                                                     'Supply From',
-                                                    readOnly: _isReadOnly('Supply From'),
+                                                    readOnly: true,
+                                                  ).copyWith(
+                                                    suffixIcon: IconButton(
+                                                      icon: const Icon(Icons.unfold_more_rounded),
+                                                      onPressed: () => _pickWarehouse(isFrom: true),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -326,10 +877,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _supplyToController,
-                                                  readOnly: _isReadOnly('Supply To'),
+                                                  readOnly: true,
+                                                  onTap: () => _pickWarehouse(isFrom: false),
                                                   decoration: _inputDecoration(
                                                     'Supply To',
-                                                    readOnly: _isReadOnly('Supply To'),
+                                                    readOnly: true,
+                                                  ).copyWith(
+                                                    suffixIcon: IconButton(
+                                                      icon: const Icon(Icons.unfold_more_rounded),
+                                                      onPressed: () => _pickWarehouse(isFrom: false),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -361,9 +918,15 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                 child: TextFormField(
                                                   controller: _orderNoController,
                                                   readOnly: true,
+                                                  onTap: _browseOrderEntryItem,
                                                   decoration: _inputDecoration(
                                                     'Order No.',
                                                     readOnly: true,
+                                                  ).copyWith(
+                                                    suffixIcon: IconButton(
+                                                      icon: const Icon(Icons.unfold_more_rounded),
+                                                      onPressed: _browseOrderEntryItem,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -542,10 +1105,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _preparedController,
-                                                  readOnly: _isReadOnly('Prepared'),
+                                                  readOnly: true,
                                                   decoration: _inputDecoration(
                                                     'Prepared',
-                                                    readOnly: _isReadOnly('Prepared'),
+                                                    readOnly: true,
                                                   ),
                                                 ),
                                               ),
@@ -558,10 +1121,18 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _approvedController,
-                                                  readOnly: _isReadOnly('Approved'),
+                                                  readOnly: true,
+                                                  onTap: _isReadOnly('Approved') ? null : () => _pickEmployee(field: 'Approved'),
                                                   decoration: _inputDecoration(
                                                     'Approved',
-                                                    readOnly: _isReadOnly('Approved'),
+                                                    readOnly: true,
+                                                  ).copyWith(
+                                                    suffixIcon: IconButton(
+                                                      icon: const Icon(Icons.unfold_more_rounded),
+                                                      onPressed: _isReadOnly('Approved')
+                                                          ? null
+                                                          : () => _pickEmployee(field: 'Approved'),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -574,10 +1145,18 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _receivedController,
-                                                  readOnly: _isReadOnly('Received'),
+                                                  readOnly: true,
+                                                  onTap: _isReadOnly('Received') ? null : () => _pickEmployee(field: 'Received'),
                                                   decoration: _inputDecoration(
                                                     'Received',
-                                                    readOnly: _isReadOnly('Received'),
+                                                    readOnly: true,
+                                                  ).copyWith(
+                                                    suffixIcon: IconButton(
+                                                      icon: const Icon(Icons.unfold_more_rounded),
+                                                      onPressed: _isReadOnly('Received')
+                                                          ? null
+                                                          : () => _pickEmployee(field: 'Received'),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
