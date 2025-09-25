@@ -15,6 +15,21 @@ class Responsive {
   static bool isExpanded(BuildContext context) =>
       MediaQuery.of(context).size.width >= mediumMaxWidth;
 
+  static T value<T>(
+    BuildContext context, {
+    required T compact,
+    T? medium,
+    required T expanded,
+  }) {
+    if (isExpanded(context)) {
+      return expanded;
+    }
+    if (isMedium(context)) {
+      return medium ?? expanded;
+    }
+    return compact;
+  }
+
   static int columnsForWidth(
     double width, {
     int compact = 2,

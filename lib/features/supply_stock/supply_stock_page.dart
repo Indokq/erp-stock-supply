@@ -4,10 +4,8 @@ import '../shared/services/api_service.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/utils/formatters.dart';
 import 'create_supply_page.dart';
-import 'supply_detail_page.dart';
-import 'models/supply_header.dart';
-import 'edit_supply_page.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/responsive/responsive.dart';
 
 class SupplyStockPage extends StatefulWidget {
   const SupplyStockPage({super.key});
@@ -50,7 +48,8 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
 
         if (tbl1 != null) {
           setState(() {
-            _supplyStocks = tbl1.map((json) => SupplyStock.fromJson(json)).toList();
+            _supplyStocks =
+                tbl1.map((json) => SupplyStock.fromJson(json)).toList();
             _isLoading = false;
           });
         }
@@ -122,15 +121,98 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
     _loadSupplyStocks();
   }
 
+  Widget _buildCreateButton({bool fillWidth = false}) {
+    final button = ElevatedButton.icon(
+      onPressed: _navigateToCreateSupply,
+      icon: const Icon(Icons.add, size: 20),
+      label: const Text('Create New'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryBlue,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+      ),
+    );
+
+    if (fillWidth) {
+      return SizedBox(
+        width: double.infinity,
+        child: button,
+      );
+    }
+    return button;
+  }
+
+  Widget _buildDateFilterFields(bool isCompact) {
+    Widget buildField({
+      required String label,
+      required DateTime value,
+      required VoidCallback onTap,
+    }) {
+      return InkWell(
+        onTap: onTap,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            isDense: true,
+            suffixIcon: const Icon(Icons.calendar_today, size: 20),
+          ),
+          child: Text(
+            formatLongDate(value),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    final startField = buildField(
+      label: 'Start Date',
+      value: _startDate,
+      onTap: _selectStartDate,
+    );
+    final endField = buildField(
+      label: 'End Date',
+      value: _endDate,
+      onTap: _selectEndDate,
+    );
+
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          startField,
+          const SizedBox(height: 12),
+          endField,
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: startField),
+        const SizedBox(width: 16),
+        Expanded(child: endField),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isCompact = Responsive.isCompact(context);
+    final horizontalPadding = isCompact ? 16.0 : 20.0;
+
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
         title: const Text('Stock Supply'),
         actions: [
           IconButton(
-            icon: Icon(_showDateFilter ? Icons.filter_list : Icons.filter_list_outlined),
+            icon: Icon(
+              _showDateFilter ? Icons.filter_list : Icons.filter_list_outlined,
+            ),
             onPressed: _toggleDateFilter,
             tooltip: 'Date Filter',
           ),
@@ -145,11 +227,10 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Date Filter Section
             if (_showDateFilter)
               Container(
                 color: AppColors.surfaceCard,
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(isCompact ? 16 : 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -170,102 +251,65 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: _selectStartDate,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Start Date',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                suffixIcon: Icon(Icons.calendar_today, size: 20),
-                              ),
-                              child: Text(
-                                formatLongDate(_startDate),
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: InkWell(
-                            onTap: _selectEndDate,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'End Date',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                suffixIcon: Icon(Icons.calendar_today, size: 20),
-                              ),
-                              child: Text(
-                                formatLongDate(_endDate),
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildDateFilterFields(isCompact),
                     const SizedBox(height: 12),
                     Text(
                       'Showing data from ${formatLongDate(_startDate)} to ${formatLongDate(_endDate)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                            color: AppColors.textSecondary,
+                          ),
                     ),
                   ],
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                isCompact ? 16 : 20,
+                horizontalPadding,
+                isCompact ? 12 : 20,
+              ),
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(isCompact ? 16 : 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const SectionHeader(title: 'Stock Supply List'),
-                                ElevatedButton.icon(
-                                  onPressed: _navigateToCreateSupply,
-                                  icon: const Icon(Icons.add, size: 20),
-                                  label: const Text('Create New'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryBlue,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                  ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Total: ${_supplyStocks.length} supply records',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Total: ${_supplyStocks.length} supply records',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          if (!isCompact) _buildCreateButton(),
+                        ],
                       ),
-                    ),
+                      if (isCompact) ...[
+                        const SizedBox(height: 12),
+                        _buildCreateButton(fillWidth: true),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             Expanded(
-              child: _buildContent(),
+              child: _buildContent(horizontalPadding),
             ),
           ],
         ),
@@ -273,7 +317,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(double horizontalPadding) {
+    final isCompact = Responsive.isCompact(context);
+
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(),
@@ -296,16 +342,16 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
               Text(
                 'Error Loading Data',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                ),
+                      color: AppColors.textPrimary,
+                    ),
               ),
               const SizedBox(height: 8),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+                      color: AppColors.textSecondary,
+                    ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -331,128 +377,29 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        isCompact ? 12 : 20,
+        horizontalPadding,
+        isCompact ? 24 : 32,
+      ),
       itemCount: _supplyStocks.length,
       itemBuilder: (context, index) {
         final supply = _supplyStocks[index];
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.only(bottom: isCompact ? 10 : 12),
           child: SupplyStockCard(
             supply: supply,
             onTap: () {
-              _openSupplyForEdit(supply);
+              // TODO: Navigate to supply detail page
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Tapped on ${supply.supplyNo}')),
+              );
             },
           ),
         );
       },
     );
-  }
-
-  Future<void> _openSupplyForEdit(SupplyStock supply) async {
-    // Fetch header and detail via API using provided apidata formats
-    try {
-      String _formatDdMmmYyyy(DateTime d) {
-        const months = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-        ];
-        final dd = d.day.toString().padLeft(2, '0');
-        final mmm = months[d.month - 1];
-        final yyyy = d.year.toString();
-        return '$dd-$mmm-$yyyy';
-      }
-
-      final headerRes = await ApiService.getSupplyHeader(
-        supplyCls: 1,
-        supplyId: supply.supplyId,
-        userEntry: 'admin',
-        companyId: 1,
-        // Pass date string per backend format e.g., 04-Mar-2025
-        supplyDateStr: _formatDdMmmYyyy(supply.supplyDate),
-      );
-
-      final detailRes = await ApiService.getSupplyDetail(
-        supplyCls: 1,
-        supplyId: supply.supplyId,
-        userEntry: 'admin',
-        companyId: 1,
-      );
-
-      if (headerRes['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(headerRes['message'] ?? 'Failed to fetch header')),
-        );
-        return;
-      }
-      if (detailRes['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(detailRes['message'] ?? 'Failed to fetch detail')),
-        );
-        return;
-      }
-
-      final headerData = headerRes['data'];
-      final headerTbl1 = headerData['tbl1'] as List?;
-      final headerJson = (headerTbl1 != null && headerTbl1.isNotEmpty)
-          ? (headerTbl1.first as Map).cast<String, dynamic>()
-          : <String, dynamic>{};
-
-      final detailData = detailRes['data'];
-      final detailTbl1 = detailData['tbl1'] as List?;
-
-      final header = SupplyHeader.fromJson(headerJson);
-
-      // Map detail rows into editable items; be tolerant of missing fields
-      final List<SupplyDetailItem> items = (detailTbl1 ?? const [])
-          .whereType<Map>()
-          .map((e) => e.cast<String, dynamic>())
-          .map((m) => SupplyDetailItem(
-                itemCode: (m['Item_Code'] ?? m['ItemCode'] ?? '').toString(),
-                itemName: (m['Item_Name'] ?? m['ItemName'] ?? '').toString(),
-                qty: () {
-                  final v = m['Qty'] ?? m['Quantity'];
-                  final s = v?.toString() ?? '';
-                  return double.tryParse(s) ?? 0;
-                }(),
-                unit: (m['OrderUnit'] ?? m['Unit'] ?? '').toString(),
-                lotNumber: (m['Lot_Number'] ?? m['LotNo'] ?? '').toString(),
-                heatNumber: (m['Heat_Number'] ?? m['HeatNo'] ?? '').toString(),
-                description: (m['Description'] ?? m['Desc'] ?? '').toString(),
-              ))
-          .toList();
-
-      if (!mounted) return;
-      // If header is editable, open full header-edit page first; otherwise go straight to detail view
-      if (supply.stsEdit == 1) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EditSupplyPage(
-              header: header,
-              initialItems: items,
-              columnMetaRows: (headerData['tbl0'] as List?)
-                  ?.whereType<Map>()
-                  .map((e) => e.cast<String, dynamic>())
-                  .toList(),
-            ),
-          ),
-        );
-      } else {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SupplyDetailPage(
-              header: header,
-              initialItems: items,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to open supply: $e')),
-      );
-    }
   }
 }
 
@@ -468,17 +415,21 @@ class SupplyStockCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = Responsive.isCompact(context);
+    final isMedium = Responsive.isMedium(context);
+
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isCompact ? 14 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
@@ -487,48 +438,69 @@ class SupplyStockCard extends StatelessWidget {
                         Text(
                           supply.supplyNo,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           formatLongDate(supply.supplyDate),
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                                color: AppColors.textSecondary,
+                              ),
                         ),
                       ],
                     ),
                   ),
                   StatusChip(
                     label: supply.stsEdit == 1 ? 'Editable' : 'Locked',
-                    tone: supply.stsEdit == 1 ? AppColors.success : AppColors.textTertiary,
+                    tone:
+                        supply.stsEdit == 1 ? AppColors.success : AppColors.textTertiary,
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildInfoRow(
+              if (isCompact)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInfoRow(
                       context,
                       icon: Icons.warehouse_outlined,
                       label: 'From',
                       value: supply.fromId,
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildInfoRow(
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
                       context,
                       icon: Icons.location_on_outlined,
                       label: 'To',
                       value: supply.toId,
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildInfoRow(
+                        context,
+                        icon: Icons.warehouse_outlined,
+                        label: 'From',
+                        value: supply.fromId,
+                      ),
+                    ),
+                    SizedBox(width: isMedium ? 12 : 16),
+                    Expanded(
+                      child: _buildInfoRow(
+                        context,
+                        icon: Icons.location_on_outlined,
+                        label: 'To',
+                        value: supply.toId,
+                      ),
+                    ),
+                  ],
+                ),
               if (supply.remarks.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildInfoRow(
@@ -554,7 +526,8 @@ class SupplyStockCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, {
+  Widget _buildInfoRow(
+    BuildContext context, {
     required IconData icon,
     required String label,
     required String value,
@@ -575,15 +548,15 @@ class SupplyStockCard extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textTertiary,
-                  fontWeight: FontWeight.w500,
-                ),
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w500,
+                    ),
               ),
               Text(
                 value.isNotEmpty ? value : '-',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+                      color: AppColors.textSecondary,
+                    ),
               ),
             ],
           ),

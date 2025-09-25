@@ -132,6 +132,187 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> browseItemStockByLot({
+    int id = 12,
+    int companyId = 1,
+    String? temp1,
+    String? temp2,
+  }) async {
+    final temp1Clause = (temp1 == null || temp1.isEmpty) ? 'NULL' : "'${temp1}'";
+    final temp2Clause = (temp2 == null || temp2.isEmpty) ? 'NULL' : "'${temp2}'";
+
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spMst_Browse_Select @Data = 'ITEMSTOCKBYLOT', @ID = ${id}, @DateStart = NULL, @DateEnd = NULL, @Company_ID = '${companyId}', @Temp1 = ${temp1Clause}, @Temp2 = ${temp2Clause}",
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message':
+              'Failed to fetch item browse with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> browseWarehouses({
+    int? id,
+    int companyId = 1,
+    String? temp1,
+    String? temp2,
+  }) async {
+    final idClause = id == null ? 'NULL' : '$id';
+    final temp1Clause = (temp1 == null || temp1.isEmpty) ? 'NULL' : "'${temp1}'";
+    final temp2Clause = (temp2 == null || temp2.isEmpty) ? 'NULL' : "'${temp2}'";
+
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spMst_Browse_Select @Data = 'WAREHOUSE', @ID = ${idClause}, @DateStart = NULL, @DateEnd = NULL, @Company_ID = '${companyId}', @Temp1 = ${temp1Clause}, @Temp2 = ${temp2Clause}",
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message':
+              'Failed to fetch warehouse browse with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> showItemStockByLot({
+    required dynamic id,
+    required dynamic seq,
+    required int companyId,
+    String temp = 'Temp',
+  }) async {
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spMst_Browse_Show @Data = 'ITEMSTOCKBYLOT', @ID = '${id}', @Seq = '${seq}', @Company_ID = '${companyId}', @Temp = '${temp}'",
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message':
+              'Failed to fetch item detail with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
   static Future<Map<String, dynamic>> createNewSupply({
     required int supplyCls,
     required String userEntry,
@@ -296,6 +477,68 @@ class ApiService {
         return {
           'success': false,
           'message': 'Failed to get supply header with status: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('❌ API Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> browseEmployees({
+    int? id,
+    int companyId = 1,
+    String? temp1,
+    String? temp2,
+  }) async {
+    final idClause = id == null ? 'NULL' : '$id';
+    final temp1Clause = (temp1 == null || temp1.isEmpty) ? 'NULL' : "'${temp1}'";
+    final temp2Clause = (temp2 == null || temp2.isEmpty) ? 'NULL' : "'${temp2}'";
+
+    try {
+      final body = {
+        'apikey': 'none',
+        'apidata':
+            "EXEC spMst_Browse_Select @Data = 'EMPLOYEE', @ID = ${idClause}, @DateStart = NULL, @DateEnd = NULL, @Company_ID = '${companyId}', @Temp1 = ${temp1Clause}, @Temp2 = ${temp2Clause}",
+      };
+
+      print('🔗 API URL: $baseUrl');
+      print('📤 Request Body: ${jsonEncode(body)}');
+
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final message = responseData['msg'] as String?;
+        if (message != null && message.contains('ERR@')) {
+          return {
+            'success': false,
+            'message': message.replaceAll('ERR@', '').trim(),
+          };
+        }
+
+        return {
+          'success': true,
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message':
+              'Failed to fetch employee browse with status: ${response.statusCode}',
         };
       }
     } catch (e) {

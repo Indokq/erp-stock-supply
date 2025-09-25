@@ -1,4 +1,4 @@
-name: Mobileinv
+name: MobileInv
 description: "A new Flutter project."
 publish_to: 'none'
 version: 0.1.0
@@ -27,10 +27,14 @@ flutter_icons:
 flutter_native_splash:
   color: "#ffffff"                 # warna background (wajib)
   image: "assets/images/eos_logo.png" # logo splash
+  android_gravity: center
+  ios_content_mode: center
+  web_image_mode: center
   color_dark: "#000000"             # warna bg dark mode (opsional)
   image_dark: "assets/images/eos_logo.png"
   android: true
   ios: true
+  web: true
 
 flutter:
   uses-material-design: true
