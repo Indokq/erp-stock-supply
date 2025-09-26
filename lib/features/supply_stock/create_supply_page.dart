@@ -619,123 +619,139 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+          final TextEditingController searchCtrl = TextEditingController();
+          List<Map<String, dynamic>> filteredRaw = List.of(items);
+
+          void applyFilter(String q) {
+            final qq = q.trim().toLowerCase();
+            filteredRaw = qq.isEmpty
+                ? List.of(items)
+                : items.where((raw) {
+                    final name = _getStringValue(
+                      raw,
+                      const ['Warehouse_Name','WarehouseName','Org_Name','Name','Description','colName','colname','ColName','Colname','colName1','colname1'],
+                      partialMatches: const ['warehouse','gudang','orgname','name'],
+                    ) ?? '';
+                    final code = _getStringValue(
+                      raw,
+                      const ['Warehouse_Code','WarehouseCode','Org_Code','Code','ID','Warehouse_ID','WarehouseId','colCode','colcode'],
+                      partialMatches: const ['warehousecode','gudang','orgcode','code','id'],
+                    ) ?? '';
+                    return name.toLowerCase().contains(qq) || code.toLowerCase().contains(qq);
+                  }).toList();
+          }
+
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(sheetContext).pop(),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: searchCtrl,
+                          onChanged: (v) => setModal(() { applyFilter(v); }),
+                          decoration: const InputDecoration(
+                            hintText: 'Cari gudang by nama atau kode...',
+                            prefixIcon: Icon(Icons.search_rounded),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      Flexible(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: filteredRaw.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final rawRow = filteredRaw[index];
+                            // Build visible subset based on metadata
+                            final row = <String, dynamic>{};
+                            for (final entry in rawRow.entries) {
+                              final colName = entry.key;
+                              final colMeta = columnMeta[colName];
+                              if (colMeta == null || colMeta.colVisible == 1) {
+                                row[colName] = entry.value;
+                              }
+                            }
+                            final title = _getStringValue(
+                                  row.isNotEmpty ? row : rawRow,
+                                  const [
+                                    'Warehouse_Name','WarehouseName','Org_Name','Name','Description','colName','colname','ColName','Colname','colName1','colname1',
+                                  ],
+                                  partialMatches: const ['warehouse','gudang','orgname','name'],
+                                ) ?? 'Warehouse ${index + 1}';
+                            final code = _getStringValue(
+                              rawRow,
+                              const ['Warehouse_Code','WarehouseCode','Org_Code','Code','ID','Warehouse_ID','WarehouseId','colCode','colcode'],
+                              partialMatches: const ['warehousecode','gudang','orgcode','code','id'],
+                            );
+                            final location = _getStringValue(
+                              rawRow,
+                              const ['Location','Address','City','colLocation','collocation','colAddr'],
+                              partialMatches: const ['lokasi','location','address','city'],
+                            );
+
+                            final selection = Map<String, dynamic>.from(rawRow)
+                              ..putIfAbsent('_displayName', () => title)
+                              ..putIfAbsent('_displayCode', () => code);
+
+                            final details = <String>[];
+                            if (code != null) details.add(code);
+                            if (location != null) details.add(location);
+
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFF3E5F5),
+                                child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                              ),
+                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                              onTap: () => Navigator.of(sheetContext).pop(selection),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final rawRow = items[index];
-                        final row = visibleItems[index];
-                        final title = _getStringValue(
-                              row.isNotEmpty ? row : rawRow,
-                              const [
-                                'Warehouse_Name',
-                                'WarehouseName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
-                              ],
-                              partialMatches: const ['warehouse', 'gudang', 'colname', 'name'],
-                            ) ??
-                            'Warehouse ${index + 1}';
-                        final code = _getStringValue(
-                          rawRow,
-                          const [
-                            'Warehouse_Code',
-                            'WarehouseCode',
-                            'Code',
-                            'Warehouse_ID',
-                            'WarehouseId',
-                            'ID',
-                            'colCode',
-                            'colcode',
-                          ],
-                          partialMatches: const ['warehousecode', 'gudang', 'code'],
-                        );
-                        final location = _getStringValue(
-                          rawRow,
-                          const [
-                            'Location',
-                            'Address',
-                            'City',
-                            'colLocation',
-                            'collocation',
-                            'colAddr',
-                          ],
-                          partialMatches: const ['lokasi', 'location', 'address', 'city'],
-                        );
-
-                        final selection = Map<String, dynamic>.from(rawRow)
-                          ..putIfAbsent('_displayName', () => title)
-                          ..putIfAbsent('_displayCode', () => code);
-
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (location != null) details.add(location);
-
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFF3E5F5),
-                            child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: details.isEmpty ? null : Text(
-                            details.join(' • '),
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       );
@@ -2115,8 +2131,20 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode', 'SKU'],
                       partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
                     );
+                    final name = _getStringValue(
+                      row,
+                      const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                      partialMatches: const ['itemname','description','colname','namestock','namabarang'],
+                    );
+                    final lot = _getStringValue(
+                      row,
+                      const ['Lot_No','LotNo','Lot_Number','Lot'],
+                      partialMatches: const ['lot','batch'],
+                    );
                     final codeLc = (code ?? '').toLowerCase();
-                    return codeLc.contains(query);
+                    final nameLc = (name ?? '').toLowerCase();
+                    final lotLc = (lot ?? '').toLowerCase();
+                    return codeLc.contains(query) || nameLc.contains(query) || lotLc.contains(query);
                   }).toList();
           }
 
@@ -2148,7 +2176,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: TextField(
                           controller: searchCtrl,
-                          onChanged: (v) => setModalState(() => applyFilter(v)),
+                          onChanged: (v) => setModalState(() { applyFilter(v); }),
                           decoration: const InputDecoration(
                             hintText: 'Cari berdasarkan Item Code...',
                             prefixIcon: Icon(Icons.search_rounded),

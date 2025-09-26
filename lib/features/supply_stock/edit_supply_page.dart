@@ -1025,7 +1025,19 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'],
                       partialMatches: const ['itemcode', 'code', 'sku'],
                     );
-                    return (code ?? '').toLowerCase().contains(query);
+                    final name = _getStringValue(
+                      r,
+                      const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                      partialMatches: const ['itemname','description','colname','namestock','namabarang'],
+                    );
+                    final lot = _getStringValue(
+                      r,
+                      const ['Lot_No','LotNo','Lot_Number','Lot'],
+                      partialMatches: const ['lot','batch'],
+                    );
+                    return (code ?? '').toLowerCase().contains(query) ||
+                           (name ?? '').toLowerCase().contains(query) ||
+                           (lot ?? '').toLowerCase().contains(query);
                   }).toList();
           }
 
@@ -1043,7 +1055,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: TextField(
                         controller: searchCtrl,
-                        onChanged: (v) => setModal(() => applyFilter(v)),
+                        onChanged: (v) => setModal(() { applyFilter(v); }),
                         decoration: const InputDecoration(
                           hintText: 'Cari berdasarkan Item Code...',
                           prefixIcon: Icon(Icons.search_rounded),
