@@ -485,7 +485,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               resolveInt(item.raw?['UnitId']) ??
               resolveInt(item.raw?['UOM_ID']) ??
               resolveInt(item.raw?['UomId']) ??
-              resolveInt(item.raw?['Item_Unit_ID']);
+              resolveInt(item.raw?['Item_Unit_ID']) ??
+              resolveInt(item.raw?['Unit_Stock']);
         }
 
         final seqId = _resolveSeqIdForDetail(item);
@@ -1661,7 +1662,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     setState(() => _isLoading = true);
 
     try {
-      final browseResult = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
+      final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
+      if (fromId == 0) {
+        if (!mounted) return;
+        _showErrorMessage('Pilih gudang From terlebih dahulu');
+        return;
+      }
+      final dateStr = _supplyDate.toIso8601String().split('T').first;
+      final browseResult = await ApiService.browseItemStockByLot(
+        id: fromId,
+        companyId: 1,
+        dateStart: dateStr,
+        dateEnd: dateStr,
+      );
 
       if (!mounted) return;
 
@@ -2055,7 +2068,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
+      final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
+      if (fromId == 0) {
+        if (!mounted) return;
+        _showErrorMessage('Pilih gudang From terlebih dahulu');
+        return;
+      }
+      final dateStr = _supplyDate.toIso8601String().split('T').first;
+      final result = await ApiService.browseItemStockByLot(
+        id: fromId,
+        companyId: 1,
+        dateStart: dateStr,
+        dateEnd: dateStr,
+      );
       if (!mounted) return;
       if (result['success'] != true) {
         _showErrorMessage(result['message'] ?? 'Tidak dapat memuat data item stock');
@@ -2077,66 +2102,102 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text('Browse Item Stock', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = items[index];
-                        final title = _getStringValue(
-                              row,
-                              const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
-                              partialMatches: const ['itemname','description','colname','namestock','namabarang'],
-                            ) ?? 'Item ${index + 1}';
-                        final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']);
-                        final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']);
-                        final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
-                        final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
-                        final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']);
+          final TextEditingController searchCtrl = TextEditingController();
+          List<Map<String, dynamic>> filtered = List.of(items);
 
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (lot != null) details.add('Lot: $lot');
-                        if (unit != null) details.add(unit);
-                        if (qty != null) details.add('Qty: $qty');
-                        if (heat != null) details.add('Heat: $heat');
+          void applyFilter(String q) {
+            final query = q.trim().toLowerCase();
+            filtered = query.isEmpty
+                ? List.of(items)
+                : items.where((row) {
+                    final code = _getStringValue(
+                      row,
+                      const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode', 'SKU'],
+                      partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+                    );
+                    final codeLc = (code ?? '').toLowerCase();
+                    return codeLc.contains(query);
+                  }).toList();
+          }
 
-                        return ListTile(
-                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                          subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => Navigator.of(sheetContext).pop(row),
-                        );
-                      },
-                    ),
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text('Browse Item Stock', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: searchCtrl,
+                          onChanged: (v) => setModalState(() => applyFilter(v)),
+                          decoration: const InputDecoration(
+                            hintText: 'Cari berdasarkan Item Code...',
+                            prefixIcon: Icon(Icons.search_rounded),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      Flexible(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final row = filtered[index];
+                            final title = _getStringValue(
+                                  row,
+                                  const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                                  partialMatches: const ['itemname','description','colname','namestock','namabarang'],
+                                ) ?? 'Item ${index + 1}';
+                            final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode','SKU'], partialMatches: const ['itemcode','kode','code','sku']);
+                            final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']);
+                            final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
+                            final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
+                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']);
+
+                            final details = <String>[];
+                            if (code != null) details.add(code);
+                            if (lot != null) details.add('Lot: $lot');
+                            if (unit != null) details.add(unit);
+                            if (qty != null) details.add('Qty: $qty');
+                            if (heat != null) details.add('Heat: $heat');
+
+                            return ListTile(
+                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                              onTap: () => Navigator.of(sheetContext).pop(row),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       );
@@ -2161,7 +2222,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         description: _getStringValue(selectionRaw, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? currentDetail.description,
         size: _getStringValue(selectionRaw, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']) ?? currentDetail.size,
         itemId: _parseIntValue(_getFirstValue(selectionRaw, const ['Item_ID','ItemId','ID'], partialMatches: const ['itemid','stockid','id'])) ?? currentDetail.itemId,
-        unitId: _parseIntValue(_getFirstValue(selectionRaw, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID'], partialMatches: const ['unitid','uomid'])) ?? currentDetail.unitId,
+        unitId: _parseIntValue(_getFirstValue(selectionRaw, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID','Unit_Stock'], partialMatches: const ['unitid','uomid','unitstock'])) ?? currentDetail.unitId,
         seqId: resolvedSeqId,
         raw: selectionRaw,
       );

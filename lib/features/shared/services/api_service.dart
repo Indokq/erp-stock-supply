@@ -133,8 +133,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> browseItemStockByLot({
-    int id = 12,
+    required int id,
     int companyId = 1,
+    String? dateStart,
+    String? dateEnd,
     String? temp1,
     String? temp2,
   }) async {
@@ -145,7 +147,12 @@ class ApiService {
       final body = {
         'apikey': 'none',
         'apidata':
-            "EXEC spMst_Browse_Select @Data = 'ITEMSTOCKBYLOT', @ID = ${id}, @DateStart = NULL, @DateEnd = NULL, @Company_ID = '${companyId}', @Temp1 = ${temp1Clause}, @Temp2 = ${temp2Clause}",
+            "EXEC spMst_Browse_Select @Data = 'ITEMSTOCKBYLOT', "
+            "@ID = ${id}, "
+            "@DateStart = ${dateStart == null || dateStart.isEmpty ? 'NULL' : "'${dateStart}'"}, "
+            "@DateEnd = ${dateEnd == null || dateEnd.isEmpty ? 'NULL' : "'${dateEnd}'"}, "
+            "@Company_ID = '${companyId}', "
+            "@Temp1 = ${temp1Clause}, @Temp2 = ${temp2Clause}",
       };
 
       print('🔗 API URL: $baseUrl');

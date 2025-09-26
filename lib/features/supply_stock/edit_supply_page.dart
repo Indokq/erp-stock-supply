@@ -971,7 +971,20 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
   Future<void> _browseItemStock(int index) async {
     try {
-      final result = await ApiService.browseItemStockByLot(id: 12, companyId: 1);
+      final fromId = _tryParseInt(_supplyFromId) ?? _tryParseInt(widget.header.fromId) ?? 0;
+      if (fromId == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pilih gudang From terlebih dahulu'), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final dateStr = _supplyDate.toIso8601String().split('T').first;
+      final result = await ApiService.browseItemStockByLot(
+        id: fromId,
+        companyId: 1,
+        dateStart: dateStr,
+        dateEnd: dateStr,
+      );
       if (result['success'] != true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message'] ?? 'Gagal load item stock'), backgroundColor: Colors.redAccent),
@@ -999,48 +1012,83 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         context: context,
         isScrollControlled: true,
         builder: (sheetContext) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
+          final TextEditingController searchCtrl = TextEditingController();
+          List<Map<String, dynamic>> filtered = List.of(rows);
+
+          void applyFilter(String q) {
+            final query = q.trim().toLowerCase();
+            filtered = query.isEmpty
+                ? List.of(rows)
+                : rows.where((r) {
+                    final code = _getStringValue(
+                      r,
+                      const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'],
+                      partialMatches: const ['itemcode', 'code', 'sku'],
+                    );
+                    return (code ?? '').toLowerCase().contains(query);
+                  }).toList();
+          }
+
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: searchCtrl,
+                        onChanged: (v) => setModal(() => applyFilter(v)),
+                        decoration: const InputDecoration(
+                          hintText: 'Cari berdasarkan Item Code...',
+                          prefixIcon: Icon(Icons.search_rounded),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, i) {
+                          final r = filtered[i];
+                          final code = _getStringValue(r, const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'], partialMatches: const ['itemcode', 'code', 'sku']) ?? '';
+                          final name = _getStringValue(r, const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'], partialMatches: const ['itemname', 'name', 'title', 'desc']) ?? '';
+                          final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
+                          final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
+                          return ListTile(
+                            leading: const Icon(Icons.inventory_2_outlined),
+                            title: Text(name.isNotEmpty ? name : code),
+                            subtitle: [
+                              if (code.isNotEmpty) 'Code: $code',
+                              if (lot.isNotEmpty) 'Lot: $lot',
+                              if (heat.isNotEmpty) 'Heat: $heat',
+                            ].join(' • ').isEmpty
+                                ? null
+                                : Text([
+                                    if (code.isNotEmpty) 'Code: $code',
+                                    if (lot.isNotEmpty) 'Lot: $lot',
+                                    if (heat.isNotEmpty) 'Heat: $heat',
+                                  ].join(' • ')),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(sheetContext).pop(r),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                const Divider(height: 1),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, i) {
-                      final r = rows[i];
-                      final code = _getStringValue(r, const ['Item_Code', 'Code', 'SKU'], partialMatches: const ['code', 'sku']) ?? '';
-                      final name = _getStringValue(r, const ['Item_Name', 'Name', 'Title', 'Description'], partialMatches: const ['name', 'title', 'desc']) ?? '';
-                      final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
-                      final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
-                      return ListTile(
-                        leading: const Icon(Icons.inventory_2_outlined),
-                        title: Text(name.isNotEmpty ? name : code),
-                        subtitle: [
-                          if (code.isNotEmpty) 'Code: $code',
-                          if (lot.isNotEmpty) 'Lot: $lot',
-                          if (heat.isNotEmpty) 'Heat: $heat',
-                        ].join(' • ').isEmpty
-                            ? null
-                            : Text([
-                                if (code.isNotEmpty) 'Code: $code',
-                                if (lot.isNotEmpty) 'Lot: $lot',
-                                if (heat.isNotEmpty) 'Heat: $heat',
-                              ].join(' • ')),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(sheetContext).pop(r),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       );
@@ -1061,8 +1109,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         );
         final unitIdValue = _extractIntValue(
           selected,
-          const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID'],
-          partialMatches: const ['unitid', 'uomid'],
+          const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID', 'Unit_Stock'],
+          partialMatches: const ['unitid', 'uomid', 'unitstock'],
         );
 
         final selectionRaw = Map<String, dynamic>.from(selected);
