@@ -7,6 +7,10 @@ class SupplyDetailItem {
   String heatNumber;
   String description;
   String size;
+  int? itemId;
+  String seqId;
+  int? unitId;
+  Map<String, dynamic>? raw;
 
   SupplyDetailItem({
     required this.itemCode,
@@ -17,6 +21,10 @@ class SupplyDetailItem {
     required this.heatNumber,
     required this.description,
     this.size = '',
+    this.itemId,
+    this.seqId = '0',
+    this.unitId,
+    this.raw,
   });
 
   SupplyDetailItem copyWith({
@@ -28,6 +36,10 @@ class SupplyDetailItem {
     String? heatNumber,
     String? description,
     String? size,
+    int? itemId,
+    String? seqId,
+    int? unitId,
+    Map<String, dynamic>? raw,
   }) {
     return SupplyDetailItem(
       itemCode: itemCode ?? this.itemCode,
@@ -38,6 +50,10 @@ class SupplyDetailItem {
       heatNumber: heatNumber ?? this.heatNumber,
       description: description ?? this.description,
       size: size ?? this.size,
+      itemId: itemId ?? this.itemId,
+      seqId: seqId ?? this.seqId,
+      unitId: unitId ?? this.unitId,
+      raw: raw ?? this.raw,
     );
   }
 }

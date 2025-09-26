@@ -121,6 +121,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       lotNumber: item.lotNumber,
       heatNumber: item.heatNumber,
       description: item.description,
+      size: item.size,
+      itemId: item.itemId,
+      seqId: item.seqId,
+      unitId: item.unitId,
+      raw: item.raw,
     );
   }
 
@@ -133,6 +138,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       lotNumber: '',
       heatNumber: '',
       description: '',
+      size: '',
+      seqId: '0',
     );
   }
 
@@ -301,7 +308,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await ApiService.createNewSupply(
+      final result = await ApiService.createSupplyDraft(
         supplyCls: 1,
         userEntry: 'admin',
         supplyDate: _supplyDate.toIso8601String().split('T')[0],
@@ -410,11 +417,19 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   Future<void> _saveHeaderAndProceed() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate minimal header for save
-    if (_fromWarehouseId == null || _toWarehouseId == null) {
+    // Allow manual numeric entry by falling back to text field parsing
+    final resolvedFromId =
+        _fromWarehouseId ?? _parseIntValue(_supplyFromController.text);
+    final resolvedToId =
+        _toWarehouseId ?? _parseIntValue(_supplyToController.text);
+
+    if (resolvedFromId == null || resolvedToId == null) {
       _showErrorMessage('Pilih gudang From dan To terlebih dahulu.');
       return;
     }
+
+    _fromWarehouseId ??= resolvedFromId;
+    _toWarehouseId ??= resolvedToId;
 
     setState(() => _isLoading = true);
     try {
@@ -448,9 +463,57 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       final approvedBy = _approvedById.isEmpty ? null : int.tryParse(_approvedById);
       final receivedBy = _receivedById.isEmpty ? null : int.tryParse(_receivedById);
 
-      final result = await ApiService.saveSupplyHeader(
+      final detailsPayload = <Map<String, dynamic>>[];
+      for (final item in _detailItems) {
+        final code = item.itemCode.trim();
+        final qty = item.qty;
+        if (code.isEmpty || qty == 0) continue;
+
+        int? resolveInt(dynamic value) => _parseIntValue(value);
+
+        int? resolvedItemId = item.itemId;
+        int? resolvedUnitId = item.unitId;
+        String seqId = item.seqId;
+
+        if (resolvedItemId == null || resolvedItemId <= 0) {
+          resolvedItemId = resolveInt(item.raw?['Item_ID']) ??
+              resolveInt(item.raw?['ItemId']) ??
+              resolveInt(item.raw?['ID']) ??
+              int.tryParse(code);
+        }
+
+        if (resolvedUnitId == null || resolvedUnitId <= 0) {
+          resolvedUnitId = resolveInt(item.raw?['Unit_ID']) ??
+              resolveInt(item.raw?['UnitId']) ??
+              resolveInt(item.raw?['UOM_ID']) ??
+              resolveInt(item.raw?['UomId']) ??
+              resolveInt(item.raw?['Item_Unit_ID']);
+        }
+
+        if (seqId.isEmpty || seqId == '0') {
+          seqId = _getStringValue(
+                item.raw ?? const <String, dynamic>{},
+                const ['Seq_ID', 'SeqId', 'SEQ', 'Seq'],
+                partialMatches: const ['seq', 'sequence'],
+              ) ??
+              seqId;
+        }
+
+        detailsPayload.add({
+          'itemId': resolvedItemId ?? 0,
+          'qty': qty,
+          'unitId': resolvedUnitId,
+          'lotNumber': item.lotNumber.trim(),
+          'heatNumber': item.heatNumber.trim(),
+          'size': item.size.trim(),
+          'description': item.description.trim(),
+          'seqId': seqId.isEmpty ? '0' : seqId,
+          'raw': item.raw,
+        });
+      }
+
+      final result = await ApiService.createSupplyWithDetails(
         supplyCls: 1,
-        supplyId: supplyId,
         supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
         supplyDateDdMmmYyyy: supplyDateFmt,
         fromId: fromId,
@@ -466,59 +529,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         receivedBy: receivedBy,
         companyId: 1,
         userEntry: 'admin',
+        details: detailsPayload,
       );
 
       if (!mounted) return;
 
       if (result['success'] == true) {
-        int? newId;
-        try {
-          final data = result['data'] as Map<String, dynamic>;
-          final tbl0 = data['tbl0'] as List?;
-          if (tbl0 != null && tbl0.isNotEmpty) {
-            final first = (tbl0.first as Map).cast<String, dynamic>();
-            final resultMsg = first['Result']?.toString();
-            // Try to parse ID from Result or other fields
-            final idField = first['Supply_ID'] ?? first['ID'] ?? first['SupplyId'];
-            newId = idField is int ? idField : int.tryParse(idField?.toString() ?? '');
-            if (newId == null && resultMsg != null) {
-              final match = RegExp(r"ID\s*[:=]\s*(\d+)").firstMatch(resultMsg);
-              if (match != null) {
-                newId = int.tryParse(match.group(1)!);
-              }
-            }
-          }
-        } catch (_) {}
-
-        // Save each detail row if we have an ID
+        final newId = result['headerId'] as int?;
         if (newId != null) {
           _supplyIdController.text = newId.toString();
-          for (final item in _detailItems) {
-            final code = item.itemCode.trim();
-            final qty = item.qty;
-            if (code.isEmpty || qty == 0) continue;
-            // Unit_ID is optional; attempt numeric parse from unit text if possible
-            final unitId = int.tryParse(item.unit.trim());
-            final detailRes = await ApiService.saveSupplyDetail(
-              supplyId: newId,
-              seqId: '0',
-              itemId: int.tryParse(code) ?? 0, // If code is not purely numeric, backend may handle
-              qty: qty,
-              unitId: unitId,
-              lotNumber: item.lotNumber.trim(),
-              heatNumber: item.heatNumber.trim(),
-              size: item.size.trim(),
-              description: item.description.trim(),
-              userEntry: 'admin',
-            );
-            if (detailRes['success'] != true) {
-              _showErrorMessage(detailRes['message'] ?? 'Failed to save detail');
-              // Continue saving remaining details
-            }
-          }
         }
-
-        final msg = newId != null ? 'Saved. Header ID: $newId' : 'Header saved successfully';
+        final msg = result['message']?.toString() ?? (newId != null ? 'Saved. Header ID: $newId' : 'Header and details saved');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(msg),
@@ -527,7 +548,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         );
         Navigator.pop(context, true);
       } else {
-        _showErrorMessage(result['message'] ?? 'Failed to save header');
+        _showErrorMessage(result['message'] ?? 'Failed to save header/details');
       }
     } catch (e) {
       _showErrorMessage('Failed to save supply header: $e');
@@ -647,9 +668,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       itemCount: visibleItems.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
+                        final rawRow = items[index];
                         final row = visibleItems[index];
                         final title = _getStringValue(
-                              row,
+                              row.isNotEmpty ? row : rawRow,
                               const [
                                 'Warehouse_Name',
                                 'WarehouseName',
@@ -666,7 +688,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             ) ??
                             'Warehouse ${index + 1}';
                         final code = _getStringValue(
-                          row,
+                          rawRow,
                           const [
                             'Warehouse_Code',
                             'WarehouseCode',
@@ -680,7 +702,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           partialMatches: const ['warehousecode', 'gudang', 'code'],
                         );
                         final location = _getStringValue(
-                          row,
+                          rawRow,
                           const [
                             'Location',
                             'Address',
@@ -692,7 +714,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           partialMatches: const ['lokasi', 'location', 'address', 'city'],
                         );
 
-                        final selection = Map<String, dynamic>.from(row)
+                        final selection = Map<String, dynamic>.from(rawRow)
                           ..putIfAbsent('_displayName', () => title)
                           ..putIfAbsent('_displayCode', () => code);
 
@@ -776,10 +798,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
     final chosen = name ?? code ?? _stringifyValue(data['_displayName']);
     final trimmed = chosen?.trim();
-    if (trimmed == null || trimmed.isEmpty) return;
-    if (controller.text.trim() == trimmed) return;
-
-    controller.text = trimmed;
     final id = _getFirstValue(
       data,
       const [
@@ -787,12 +805,18 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       ],
       partialMatches: const ['warehouseid', 'whid', 'id'],
     );
-    final idStr = _stringifyValue(id);
-    final idInt = int.tryParse(idStr ?? '');
+    final idInt = _parseIntValue(id);
     if (isFrom) {
       _fromWarehouseId = idInt;
     } else {
       _toWarehouseId = idInt;
+    }
+    debugPrint('Warehouse selection (${isFrom ? 'from' : 'to'}): raw id=$id parsed=$idInt');
+    if (trimmed != null && trimmed.isNotEmpty && controller.text.trim() != trimmed) {
+      controller.text = trimmed;
+    }
+    if (idInt == null) {
+      debugPrint('⚠️ Warehouse selection is missing numeric ID. Raw value: $id');
     }
     if (mounted) {
       setState(() {});
@@ -982,6 +1006,27 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       partialMatches: partialMatches,
     );
     return _stringifyValue(value);
+  }
+
+  int? _parseIntValue(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+
+    const decimalPattern = r'^-?\d+(\.0+)?$';
+    if (RegExp(decimalPattern).hasMatch(text)) {
+      final integerPortion = text.split('.').first;
+      return int.tryParse(integerPortion);
+    }
+
+    if (RegExp(r'^-?\d+$').hasMatch(text)) {
+      return int.tryParse(text);
+    }
+
+    return null;
   }
 
   Map<String, dynamic>? _extractFirstRow(Map<String, dynamic> payload) {
@@ -2080,6 +2125,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         unit: _getStringValue(selected, const ['Unit','Item_Unit','UOM','Unit_Stock'], partialMatches: const ['unit','uom','stockunit']) ?? _detailItems[rowIndex].unit,
         qty: double.tryParse((_getStringValue(selected, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']) ?? '').replaceAll(',', '.')) ?? _detailItems[rowIndex].qty,
         description: _getStringValue(selected, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? _detailItems[rowIndex].description,
+        size: _getStringValue(selected, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']) ?? _detailItems[rowIndex].size,
+        itemId: _parseIntValue(_getFirstValue(selected, const ['Item_ID','ItemId','ID'], partialMatches: const ['itemid','stockid','id'])) ?? _detailItems[rowIndex].itemId,
+        unitId: _parseIntValue(_getFirstValue(selected, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID'], partialMatches: const ['unitid','uomid'])) ?? _detailItems[rowIndex].unitId,
+        seqId: _getStringValue(selected, const ['Seq_ID','SeqId','SEQ','Seq'], partialMatches: const ['seq','sequence']) ?? _detailItems[rowIndex].seqId,
+        raw: Map<String, dynamic>.from(selected),
       );
       _updateDetailItem(rowIndex, updated);
     } catch (e) {
@@ -2833,7 +2883,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
 
   void _emitChange() {
     widget.onChanged(
-      SupplyDetailItem(
+      widget.item.copyWith(
         itemCode: _itemCodeController.text.trim(),
         itemName: _itemNameController.text.trim(),
         qty: double.tryParse(_qtyController.text.trim().replaceAll(',', '.')) ?? 0,
@@ -3005,5 +3055,4 @@ class _ColumnMeta {
     );
   }
 }
-
 

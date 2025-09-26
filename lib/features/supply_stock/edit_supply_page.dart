@@ -72,6 +72,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   // Column meta (optional)
   final Map<String, _ColumnMeta> _columnMeta = {};
 
+  int? _orderId;
+  String? _orderSeqId;
+  int _preparedById = 0;
+  String _approvedById = '';
+  String _receivedById = '';
+  bool _isSaving = false;
+  final Set<int> _deletingDetailIndexes = {};
+
   // Ensure some nested sections stay visible even when metadata is missing
   static const Set<String> _fallbackVisibleCols = {
     'Signature Information',
@@ -113,6 +121,23 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     );
   }
 
+  String _formatDateDdMmmYyyy(DateTime d) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final dd = d.day.toString().padLeft(2, '0');
+    final mmm = months[d.month - 1];
+    final yyyy = d.year.toString();
+    return '$dd-$mmm-$yyyy';
+  }
+
+  int? _tryParseInt(dynamic value) {
+    if (value == null) return null;
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+    final cleaned = raw.replaceAll(RegExp(r'[^0-9-]'), '');
+    if (cleaned.isEmpty) return null;
+    return int.tryParse(cleaned);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -150,21 +175,42 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     _supplyIdController.text = header.supplyId.toString();
     _supplyNumberController.text = header.supplyNo;
     _supplyDate = header.supplyDate;
-    // Show names instead of IDs
+
     _supplyFromId = header.fromId.isNotEmpty ? header.fromId : null;
     _supplyToId = header.toId.isNotEmpty ? header.toId : null;
     _supplyFromController.text = header.fromOrg.isNotEmpty ? header.fromOrg : header.fromId;
     _supplyToController.text = header.toOrg.isNotEmpty ? header.toOrg : header.toId;
+
+    _orderId = header.orderId == 0 ? null : header.orderId;
+    _orderSeqId = header.orderSeqId == 0 ? null : header.orderSeqId.toString();
+    if (header.orderNo.isNotEmpty) _orderNoController.text = header.orderNo;
+    if (header.projectNo.isNotEmpty) _projectNoController.text = header.projectNo;
+    if (header.itemCode.isNotEmpty) _itemCodeController.text = header.itemCode;
+    if (header.itemName.isNotEmpty) _itemNameController.text = header.itemName;
+    if (header.qty != null && header.qty! > 0) {
+      _qtyOrderController.text = header.qty!.toString();
+    }
+    if (header.heatNumber.isNotEmpty) _heatNoController.text = header.heatNumber;
+
     _refNoController.text = header.refNo;
     _remarksController.text = header.remarks;
     _templateNameController.text = header.templateName;
-    // Audit
+    _templateName = header.templateName;
+    _templateSts = header.templateSts;
+    _useTemplate = header.templateSts == 1;
+
+    _preparedById = header.preparedBy;
     _preparedByController.text = header.preparedBy.toString();
     _preparedController.text = header.prepared;
+
+    _approvedById = header.approvedBy;
     _approvedByController.text = header.approvedBy;
     _approvedController.text = header.approved;
+
+    _receivedById = header.receivedBy;
     _receivedByController.text = header.receivedBy;
     _receivedController.text = header.received;
+
     setState(() {});
   }
 
@@ -473,9 +519,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       if (selected != null) {
         setState(() {
           if (field == 'Approved') {
+            _approvedById = selected['id'] ?? '';
             _approvedByController.text = selected['id'] ?? '';
             _approvedController.text = selected['name'] ?? '';
           } else if (field == 'Received') {
+            _receivedById = selected['id'] ?? '';
             _receivedByController.text = selected['id'] ?? '';
             _receivedController.text = selected['name'] ?? '';
           }
@@ -528,7 +576,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         return double.tryParse(s.replaceAll(',', '')) ?? 0;
       }
 
-      SupplyDetailItem _mapRow(Map<String, dynamic> r) {
+      SupplyDetailItem _mapRow(Map<String, dynamic> r, int index) {
         final itemCode = _getStringValue(
           r,
           const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
@@ -569,6 +617,21 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           const ['Description', 'Remark', 'Notes'],
           partialMatches: const ['description', 'remark', 'notes', 'desc'],
         ) ?? '';
+        final seqCandidate = _getStringValue(
+          r,
+          const ['Seq_ID', 'SeqId', 'Sequence', 'Seq'],
+          partialMatches: const ['seq'],
+        );
+        final itemIdValue = _extractIntValue(
+          r,
+          const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'Item_Index', 'ItemIDX', 'ItemIdx', 'ID'],
+          partialMatches: const ['itemid', 'item_idx', 'itemindex'],
+        );
+        final unitIdValue = _extractIntValue(
+          r,
+          const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID'],
+          partialMatches: const ['unitid', 'uomid'],
+        );
 
         return SupplyDetailItem(
           itemCode: itemCode,
@@ -579,10 +642,19 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           heatNumber: heatNumber,
           description: description,
           size: size,
+          itemId: itemIdValue,
+          seqId: (seqCandidate != null && seqCandidate.trim().isNotEmpty)
+              ? seqCandidate.trim()
+              : (index + 1).toString(),
+          unitId: unitIdValue,
+          raw: Map<String, dynamic>.from(r),
         );
       }
 
-      final items = rows.map(_mapRow).toList();
+      final items = <SupplyDetailItem>[];
+      for (var i = 0; i < rows.length; i++) {
+        items.add(_mapRow(rows[i], i));
+      }
       if (!mounted) return;
       setState(() {
         _detailItems = items;
@@ -623,6 +695,79 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           final v = entry.value;
           if (v != null && _stringifyValue(v).trim().isNotEmpty) {
             return _stringifyValue(v).trim();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  int? _extractIntValue(
+    Map<String, dynamic>? data,
+    List<String> keys, {
+    List<String> partialMatches = const [],
+  }) {
+    if (data == null) return null;
+    final value = _getStringValue(data, keys, partialMatches: partialMatches);
+    if (value == null || value.isEmpty) return null;
+    return _tryParseInt(value);
+  }
+
+  String _resolveSeqId(SupplyDetailItem item, int fallbackIndex) {
+    final seq = item.seqId.trim();
+    if (seq.isNotEmpty) return seq;
+    final raw = item.raw;
+    if (raw != null) {
+      final fromRaw = _getStringValue(
+        raw,
+        const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
+        partialMatches: const ['seq'],
+      );
+      if (fromRaw != null && fromRaw.trim().isNotEmpty) {
+        return fromRaw.trim();
+      }
+    }
+    return (fallbackIndex + 1).toString();
+  }
+
+  int? _resolveItemId(SupplyDetailItem item) {
+    if (item.itemId != null && item.itemId! > 0) return item.itemId;
+    final fromRaw = _extractIntValue(
+      item.raw,
+      const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'Item_Index', 'ItemIDX', 'ItemIdx'],
+      partialMatches: const ['itemid', 'item_idx', 'itemindex'],
+    );
+    if (fromRaw != null) return fromRaw;
+    return _tryParseInt(item.itemCode);
+  }
+
+  int? _resolveUnitId(SupplyDetailItem item) {
+    if (item.unitId != null && item.unitId! > 0) return item.unitId;
+    return _extractIntValue(
+      item.raw,
+      const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID', 'Unit_Index'],
+      partialMatches: const ['unitid', 'uomid', 'unit_index'],
+    );
+  }
+
+  int? _extractSupplyIdFromResponse(dynamic payload) {
+    if (payload is! Map<String, dynamic>) return null;
+    final tbl0 = payload['tbl0'];
+    if (tbl0 is List && tbl0.isNotEmpty) {
+      final first = tbl0.first;
+      if (first is Map) {
+        final map = first.cast<String, dynamic>();
+        final candidates = [map['Supply_ID'], map['SupplyId'], map['ID']];
+        for (final candidate in candidates) {
+          final parsed = _tryParseInt(candidate);
+          if (parsed != null) return parsed;
+        }
+        final resultMsg = map['Result']?.toString();
+        if (resultMsg != null) {
+          final match = RegExp(r'(?:ID|Supply_ID)\s*[:=]\s*(\d+)').firstMatch(resultMsg);
+          if (match != null) {
+            final parsed = _tryParseInt(match.group(1));
+            if (parsed != null) return parsed;
           }
         }
       }
@@ -752,7 +897,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   }
 
   void _applyOrderEntrySelection(Map<String, dynamic> data) {
-    // Order/project
     final orderNo = _getStringValue(
       data,
       const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
@@ -766,7 +910,24 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     if (orderNo != null) _orderNoController.text = orderNo;
     if (projectNo != null) _projectNoController.text = projectNo;
 
-    // Item related
+    final orderIdStr = _getStringValue(
+      data,
+      const ['Order_ID', 'OrderId', 'ID_Order', 'ID'],
+      partialMatches: const ['orderid', 'idorder'],
+    );
+    final seqIdStr = _getStringValue(
+      data,
+      const ['Seq_ID', 'SeqId', 'Order_Seq', 'Sequence'],
+      partialMatches: const ['seq', 'sequence'],
+    );
+    final parsedOrderId = _tryParseInt(orderIdStr);
+    if (parsedOrderId != null) {
+      _orderId = parsedOrderId;
+    }
+    if (seqIdStr != null && seqIdStr.isNotEmpty) {
+      _orderSeqId = seqIdStr;
+    }
+
     final itemCode = _getStringValue(
       data,
       const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
@@ -782,7 +943,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       const ['Qty', 'Qty_Order', 'Quantity'],
       partialMatches: const ['qty', 'quantity'],
     );
-    // Omitted OrderUnit and Lot_Number from edit view; keep UI minimal
     final heatNumber = _getStringValue(
       data,
       const ['Heat_Number', 'HeatNo', 'Heat'],
@@ -879,17 +1039,32 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         final name = _getStringValue(selected, const ['Item_Name', 'Name', 'Title', 'Description'], partialMatches: const ['name', 'title', 'desc']) ?? '';
         final lot = _getStringValue(selected, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
         final heat = _getStringValue(selected, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
+        final unit = _getStringValue(selected, const ['Unit', 'UOM', 'OrderUnit', 'Unit_Name'], partialMatches: const ['unit', 'uom']) ?? '';
+        final size = _getStringValue(selected, const ['Size', 'Item_Size'], partialMatches: const ['size']) ?? '';
+        final seq = _getStringValue(selected, const ['Seq_ID', 'SeqId', 'Sequence', 'Seq'], partialMatches: const ['seq']) ?? '';
+        final itemIdValue = _extractIntValue(
+          selected,
+          const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'Item_Index', 'ItemIDX', 'ItemIdx', 'ID'],
+          partialMatches: const ['itemid', 'item_idx', 'itemindex'],
+        );
+        final unitIdValue = _extractIntValue(
+          selected,
+          const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID'],
+          partialMatches: const ['unitid', 'uomid'],
+        );
 
         final current = _detailItems[index];
-        _detailItems[index] = SupplyDetailItem(
+        _detailItems[index] = current.copyWith(
           itemCode: code.isNotEmpty ? code : current.itemCode,
           itemName: name.isNotEmpty ? name : current.itemName,
-          qty: current.qty,
-          unit: current.unit,
+          unit: unit.isNotEmpty ? unit : current.unit,
           lotNumber: lot.isNotEmpty ? lot : current.lotNumber,
           heatNumber: heat.isNotEmpty ? heat : current.heatNumber,
-          description: current.description,
-          size: current.size,
+          size: size.isNotEmpty ? size : current.size,
+          seqId: seq.isNotEmpty ? seq : current.seqId,
+          itemId: itemIdValue ?? current.itemId,
+          unitId: unitIdValue ?? current.unitId,
+          raw: Map<String, dynamic>.from(selected),
         );
       });
     } catch (e) {
@@ -922,13 +1097,98 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         lotNumber: '',
         heatNumber: '',
         description: '',
+        size: '',
+        seqId: (_detailItems.length + 1).toString(),
       ));
     });
   }
 
-  void _removeDetailItem(int index) {
+  Future<void> _removeDetailItem(int index) async {
     if (widget.readOnly) return;
-    setState(() => _detailItems.removeAt(index));
+    if (index < 0 || index >= _detailItems.length) return;
+
+    final item = _detailItems[index];
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final title = item.itemName.isNotEmpty ? item.itemName : item.itemCode;
+        return AlertDialog(
+          title: const Text('Hapus detail?'),
+          content: Text(
+            title.isNotEmpty
+                ? 'Detail "$title" akan dihapus. Lanjutkan?'
+                : 'Detail akan dihapus. Lanjutkan?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('BATAL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('HAPUS'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final supplyIdText = _supplyIdController.text.trim();
+    final supplyId = _tryParseInt(supplyIdText) ?? widget.header.supplyId;
+    final seqId = item.seqId.trim();
+
+    // Unsaved row (no seq or seq == 0) can be removed locally
+    if (seqId.isEmpty || seqId == '0' || supplyId <= 0) {
+      setState(() => _detailItems.removeAt(index));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Detail dihapus'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _deletingDetailIndexes.add(index));
+
+    final currentUser = AuthService.currentUser;
+    final userEntry = (currentUser != null && currentUser.trim().isNotEmpty)
+        ? currentUser.trim()
+        : 'admin';
+
+    try {
+      final result = await ApiService.deleteSupply(
+        supplyId: supplyId,
+        seqId: seqId,
+      );
+
+      if (result['success'] != true) {
+        final message = result['message']?.toString() ?? 'Gagal menghapus detail';
+        throw Exception(message);
+      }
+
+      setState(() => _detailItems.removeAt(index));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Detail berhasil dihapus'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal menghapus detail: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _deletingDetailIndexes.remove(index));
+      }
+    }
   }
 
   Future<void> _saveAll() async {
@@ -936,15 +1196,167 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       Navigator.pop(context);
       return;
     }
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
-    // TODO: Call backend save for header + details (update)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Header & Details saved (stub)'),
-        backgroundColor: AppColors.success,
-      ),
-    );
-    Navigator.pop(context, true);
+
+    FocusScope.of(context).unfocus();
+    setState(() => _isSaving = true);
+
+    final messenger = ScaffoldMessenger.of(context);
+    final currentUser = AuthService.currentUser;
+    final userEntry = (currentUser != null && currentUser.trim().isNotEmpty)
+        ? currentUser.trim()
+        : 'admin';
+
+    try {
+      final supplyIdText = _supplyIdController.text.trim();
+      var supplyId = _tryParseInt(supplyIdText) ?? widget.header.supplyId;
+
+      final supplyNoInput = _supplyNumberController.text.trim();
+      final supplyNo = supplyNoInput.isNotEmpty ? supplyNoInput : widget.header.supplyNo;
+      final supplyDateFmt = _formatDateDdMmmYyyy(_supplyDate);
+
+      final fromId = _tryParseInt(_supplyFromId) ?? _tryParseInt(widget.header.fromId) ?? 0;
+      final toId = _tryParseInt(_supplyToId) ?? _tryParseInt(widget.header.toId) ?? 0;
+      if (fromId == 0 || toId == 0) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Warehouse asal dan tujuan harus dipilih'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final orderId = _orderId ?? widget.header.orderId;
+      final orderSeq = (_orderSeqId != null && _orderSeqId!.trim().isNotEmpty)
+          ? _orderSeqId!.trim()
+          : (widget.header.orderSeqId == 0 ? '0' : widget.header.orderSeqId.toString());
+
+      final refNo = _refNoController.text.trim();
+      final remarks = _remarksController.text.trim();
+      final templateNameInput = _templateNameController.text.trim();
+      final templateName = templateNameInput.isNotEmpty ? templateNameInput : _templateName;
+      final templateSts = _templateSts;
+
+      int? preparedBy = _preparedById != 0 ? _preparedById : null;
+      if (preparedBy == null) {
+        preparedBy = _tryParseInt(_preparedByController.text.trim());
+      }
+      if (preparedBy == null && userEntry.toLowerCase() == 'admin') {
+        preparedBy = 1;
+      }
+      final approvedBy = _approvedById.isNotEmpty
+          ? _tryParseInt(_approvedById)
+          : _tryParseInt(_approvedByController.text.trim());
+      final receivedBy = _receivedById.isNotEmpty
+          ? _tryParseInt(_receivedById)
+          : _tryParseInt(_receivedByController.text.trim());
+
+      final headerResult = await ApiService.saveSupplyHeader(
+        supplyCls: 1,
+        supplyId: supplyId,
+        supplyNo: supplyNo.isNotEmpty ? supplyNo : 'AUTO',
+        supplyDateDdMmmYyyy: supplyDateFmt,
+        fromId: fromId,
+        toId: toId,
+        orderId: orderId,
+        orderSeq: orderSeq.isNotEmpty ? orderSeq : '0',
+        refNo: refNo,
+        remarks: remarks,
+        templateSts: templateSts,
+        templateName: templateName,
+        preparedBy: preparedBy,
+        approvedBy: approvedBy,
+        receivedBy: receivedBy,
+        companyId: 1,
+        userEntry: userEntry,
+      );
+
+      if (headerResult['success'] != true) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(headerResult['message']?.toString() ?? 'Gagal menyimpan header'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      final newId = _extractSupplyIdFromResponse(headerResult['data']);
+      if (newId != null) {
+        supplyId = newId;
+        _supplyIdController.text = newId.toString();
+      }
+
+      final detailsToSave = _detailItems
+          .where((item) => item.itemCode.trim().isNotEmpty && item.qty > 0)
+          .toList();
+
+      final List<String> detailErrors = [];
+      var detailSaved = 0;
+
+      for (var i = 0; i < detailsToSave.length; i++) {
+        final item = detailsToSave[i];
+        final seqId = _resolveSeqId(item, i);
+        final itemId = _resolveItemId(item);
+        if (itemId == null || itemId == 0) {
+          detailErrors.add('Detail ${i + 1}: Item ID tidak ditemukan');
+          continue;
+        }
+        final unitId = _resolveUnitId(item);
+
+        final detailResult = await ApiService.saveSupplyDetail(
+          supplyId: supplyId,
+          seqId: seqId,
+          itemId: itemId,
+          qty: item.qty,
+          unitId: unitId,
+          lotNumber: item.lotNumber.trim(),
+          heatNumber: item.heatNumber.trim(),
+          size: item.size.trim(),
+          description: item.description.trim(),
+          userEntry: userEntry,
+        );
+
+        if (detailResult['success'] != true) {
+          detailErrors.add('Detail ${i + 1}: ' + (detailResult['message']?.toString() ?? 'gagal disimpan'));
+        } else {
+          detailSaved++;
+        }
+      }
+
+      if (detailErrors.isNotEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(detailErrors.first),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            detailSaved > 0 ? 'Header dan ${detailSaved} detail tersimpan' : 'Header tersimpan',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      Navigator.pop(context, true);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan: ' + e.toString()),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
@@ -964,10 +1376,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         actions: [
           if (!widget.readOnly) ...[
             TextButton(
-              onPressed: _saveAll,
-              child: const Text(
-                'SAVE',
-                style: TextStyle(
+              onPressed: _isSaving ? null : _saveAll,
+              child: Text(
+                _isSaving ? 'SAVING...' : 'SAVE',
+                style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   color: AppColors.primaryBlue,
                 ),
@@ -1484,7 +1896,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                   _detailItems[entry.key] = updatedItem;
                                                 });
                                               },
-                                              onDelete: widget.readOnly ? null : () => _removeDetailItem(entry.key),
+                                              onDelete: widget.readOnly || _deletingDetailIndexes.contains(entry.key)
+                                                  ? null
+                                                  : () => _removeDetailItem(entry.key),
                                               readOnly: widget.readOnly,
                                               onBrowse: widget.readOnly ? null : () => _browseItemStock(entry.key),
                                             ),

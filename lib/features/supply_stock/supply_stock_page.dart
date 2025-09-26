@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../shared/models/stock_models.dart';
 import '../shared/services/api_service.dart';
+import '../shared/services/auth_service.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/utils/formatters.dart';
 import 'create_supply_page.dart';
@@ -78,6 +80,130 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       // Refresh the list when returning from create page
       _loadSupplyStocks();
     });
+  }
+
+  String? _extractSeqId(Map<String, dynamic> row) {
+    for (final key in const ['Seq_ID', 'SeqId', 'Seq', 'SEQ_ID', 'Seq_ID_Detail']) {
+      final value = row[key];
+      if (value == null) continue;
+      final seq = value.toString().trim();
+      if (seq.isNotEmpty) {
+        return seq;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _confirmDeleteSupply(SupplyStock supply) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Supply'),
+          content: Text(
+            'Supply ${supply.supplyNo} akan dihapus beserta detailnya. Lanjutkan?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('BATAL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('HAPUS'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    var progressShown = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final messenger = ScaffoldMessenger.of(context);
+    final currentUser = AuthService.currentUser;
+    final userEntry = (currentUser != null && currentUser.trim().isNotEmpty)
+        ? currentUser.trim()
+        : 'admin';
+
+    try {
+      final detailSeqIds = <String>[];
+      const companyId = 1;
+      final detailResult = await ApiService.getSupplyDetail(
+        supplyCls: 1,
+        supplyId: supply.supplyId,
+        userEntry: userEntry,
+        companyId: companyId,
+      );
+
+      if (detailResult['success'] == true) {
+        final data = detailResult['data'];
+        if (data is Map<String, dynamic>) {
+          final list = data['tbl1'];
+          if (list is List) {
+            for (final row in list.whereType<Map>()) {
+              final seq = _extractSeqId(row.cast<String, dynamic>());
+              if (seq != null && seq.isNotEmpty) {
+                debugPrint('Deleting detail seq $seq for supply ${supply.supplyId}');
+                detailSeqIds.add(seq);
+              }
+            }
+          }
+        }
+      }
+
+      for (final seq in detailSeqIds.toSet()) {
+        final deleteDetail = await ApiService.deleteSupply(
+          supplyId: supply.supplyId,
+          seqId: seq,
+        );
+        if (deleteDetail['success'] != true) {
+          final message = deleteDetail['message']?.toString() ?? 'Gagal menghapus detail';
+          throw Exception(message);
+        }
+      }
+
+      final deleteHeader = await ApiService.deleteSupply(
+        supplyId: supply.supplyId,
+        seqId: '0',
+      );
+
+      if (deleteHeader['success'] != true) {
+        final message = deleteHeader['message']?.toString() ?? 'Gagal menghapus supply';
+        throw Exception(message);
+      }
+
+      if (progressShown && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressShown = false;
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Supply ${supply.supplyNo} berhasil dihapus'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+
+      _loadSupplyStocks();
+    } catch (e) {
+      if (progressShown && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressShown = false;
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gagal menghapus supply: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Future<void> _selectStartDate() async {
@@ -467,6 +593,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                 );
               }
             },
+            onDelete: () => _confirmDeleteSupply(supply),
           ),
         );
       },
@@ -479,10 +606,12 @@ class SupplyStockCard extends StatelessWidget {
     super.key,
     required this.supply,
     required this.onTap,
+    this.onDelete,
   });
 
   final SupplyStock supply;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -523,10 +652,24 @@ class SupplyStockCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  StatusChip(
-                    label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
-                    tone:
-                        supply.stsEdit == 1 ? AppColors.success : AppColors.textTertiary,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      StatusChip(
+                        label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
+                        tone: supply.stsEdit == 1
+                            ? AppColors.success
+                            : AppColors.textTertiary,
+                      ),
+                      if (onDelete != null) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                          onPressed: onDelete,
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
