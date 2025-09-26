@@ -473,8 +473,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
         int? resolvedItemId = item.itemId;
         int? resolvedUnitId = item.unitId;
-        String seqId = item.seqId;
-
         if (resolvedItemId == null || resolvedItemId <= 0) {
           resolvedItemId = resolveInt(item.raw?['Item_ID']) ??
               resolveInt(item.raw?['ItemId']) ??
@@ -490,14 +488,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               resolveInt(item.raw?['Item_Unit_ID']);
         }
 
-        if (seqId.isEmpty || seqId == '0') {
-          seqId = _getStringValue(
-                item.raw ?? const <String, dynamic>{},
-                const ['Seq_ID', 'SeqId', 'SEQ', 'Seq'],
-                partialMatches: const ['seq', 'sequence'],
-              ) ??
-              seqId;
-        }
+        final seqId = _resolveSeqIdForDetail(item);
 
         detailsPayload.add({
           'itemId': resolvedItemId ?? 0,
@@ -507,7 +498,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           'heatNumber': item.heatNumber.trim(),
           'size': item.size.trim(),
           'description': item.description.trim(),
-          'seqId': seqId.isEmpty ? '0' : seqId,
+          'seqId': seqId,
           'raw': item.raw,
         });
       }
@@ -1027,6 +1018,42 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
 
     return null;
+  }
+
+  bool _rawHasSupplyContext(Map<String, dynamic>? raw) {
+    if (raw == null || raw.isEmpty) {
+      return false;
+    }
+    for (final key in raw.keys) {
+      final normalized = key.toString().toLowerCase();
+      if (normalized.contains('supply_id') || normalized.contains('supplydetail')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String _resolveSeqIdForDetail(SupplyDetailItem item) {
+    final seq = item.seqId.trim();
+    if (seq.isNotEmpty && seq != '0') {
+      return seq;
+    }
+
+    if (_rawHasSupplyContext(item.raw)) {
+      final fromRaw = _getStringValue(
+        item.raw!,
+        const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
+        partialMatches: const ['seq'],
+      );
+      if (fromRaw != null) {
+        final trimmed = fromRaw.trim();
+        if (trimmed.isNotEmpty && trimmed != '0') {
+          return trimmed;
+        }
+      }
+    }
+
+    return '0';
   }
 
   Map<String, dynamic>? _extractFirstRow(Map<String, dynamic> payload) {
@@ -2116,20 +2143,27 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
       if (!mounted || selected == null) return;
 
+      final currentDetail = _detailItems[rowIndex];
+      final selectionRaw = Map<String, dynamic>.from(selected);
+      final hasSupplyContext = _rawHasSupplyContext(selectionRaw);
+      final resolvedSeqId = hasSupplyContext
+          ? (_getStringValue(selectionRaw, const ['Seq_ID','SeqId','SEQ','Seq'], partialMatches: const ['seq','sequence']) ?? currentDetail.seqId)
+          : currentDetail.seqId;
+
       // Map selection into the target row
-      final updated = _detailItems[rowIndex].copyWith(
-        itemCode: _getStringValue(selected, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']) ?? _detailItems[rowIndex].itemCode,
-        itemName: _getStringValue(selected, const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'], partialMatches: const ['itemname','description','colname','namestock','namabarang']) ?? _detailItems[rowIndex].itemName,
-        lotNumber: _getStringValue(selected, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']) ?? _detailItems[rowIndex].lotNumber,
-        heatNumber: _getStringValue(selected, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']) ?? _detailItems[rowIndex].heatNumber,
-        unit: _getStringValue(selected, const ['Unit','Item_Unit','UOM','Unit_Stock'], partialMatches: const ['unit','uom','stockunit']) ?? _detailItems[rowIndex].unit,
-        qty: double.tryParse((_getStringValue(selected, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']) ?? '').replaceAll(',', '.')) ?? _detailItems[rowIndex].qty,
-        description: _getStringValue(selected, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? _detailItems[rowIndex].description,
-        size: _getStringValue(selected, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']) ?? _detailItems[rowIndex].size,
-        itemId: _parseIntValue(_getFirstValue(selected, const ['Item_ID','ItemId','ID'], partialMatches: const ['itemid','stockid','id'])) ?? _detailItems[rowIndex].itemId,
-        unitId: _parseIntValue(_getFirstValue(selected, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID'], partialMatches: const ['unitid','uomid'])) ?? _detailItems[rowIndex].unitId,
-        seqId: _getStringValue(selected, const ['Seq_ID','SeqId','SEQ','Seq'], partialMatches: const ['seq','sequence']) ?? _detailItems[rowIndex].seqId,
-        raw: Map<String, dynamic>.from(selected),
+      final updated = currentDetail.copyWith(
+        itemCode: _getStringValue(selectionRaw, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']) ?? currentDetail.itemCode,
+        itemName: _getStringValue(selectionRaw, const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'], partialMatches: const ['itemname','description','colname','namestock','namabarang']) ?? currentDetail.itemName,
+        lotNumber: _getStringValue(selectionRaw, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']) ?? currentDetail.lotNumber,
+        heatNumber: _getStringValue(selectionRaw, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']) ?? currentDetail.heatNumber,
+        unit: _getStringValue(selectionRaw, const ['Unit','Item_Unit','UOM','Unit_Stock'], partialMatches: const ['unit','uom','stockunit']) ?? currentDetail.unit,
+        qty: double.tryParse((_getStringValue(selectionRaw, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']) ?? '').replaceAll(',', '.')) ?? currentDetail.qty,
+        description: _getStringValue(selectionRaw, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? currentDetail.description,
+        size: _getStringValue(selectionRaw, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']) ?? currentDetail.size,
+        itemId: _parseIntValue(_getFirstValue(selectionRaw, const ['Item_ID','ItemId','ID'], partialMatches: const ['itemid','stockid','id'])) ?? currentDetail.itemId,
+        unitId: _parseIntValue(_getFirstValue(selectionRaw, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID'], partialMatches: const ['unitid','uomid'])) ?? currentDetail.unitId,
+        seqId: resolvedSeqId,
+        raw: selectionRaw,
       );
       _updateDetailItem(rowIndex, updated);
     } catch (e) {

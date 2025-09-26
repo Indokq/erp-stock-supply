@@ -713,13 +713,24 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     return _tryParseInt(value);
   }
 
+  bool _rawHasSupplyContext(Map<String, dynamic>? raw) {
+    if (raw == null || raw.isEmpty) return false;
+    for (final key in raw.keys) {
+      final normalized = key.toString().toLowerCase();
+      if (normalized.contains('supply_id') || normalized.contains('supplydetail')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   String _resolveSeqId(SupplyDetailItem item, int fallbackIndex) {
+    final hasSupplyContext = _rawHasSupplyContext(item.raw);
     final seq = item.seqId.trim();
-    if (seq.isNotEmpty) return seq;
-    final raw = item.raw;
-    if (raw != null) {
+    if (hasSupplyContext) {
+      if (seq.isNotEmpty && seq != '0') return seq;
       final fromRaw = _getStringValue(
-        raw,
+        item.raw!,
         const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
         partialMatches: const ['seq'],
       );
@@ -727,7 +738,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         return fromRaw.trim();
       }
     }
-    return (fallbackIndex + 1).toString();
+    // For new rows (no supply context) always use "0" so backend inserts instead of updating
+    return '0';
   }
 
   int? _resolveItemId(SupplyDetailItem item) {
@@ -1053,6 +1065,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           partialMatches: const ['unitid', 'uomid'],
         );
 
+        final selectionRaw = Map<String, dynamic>.from(selected);
+        final hasSupplyContext = _rawHasSupplyContext(selectionRaw);
+
         final current = _detailItems[index];
         _detailItems[index] = current.copyWith(
           itemCode: code.isNotEmpty ? code : current.itemCode,
@@ -1061,10 +1076,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           lotNumber: lot.isNotEmpty ? lot : current.lotNumber,
           heatNumber: heat.isNotEmpty ? heat : current.heatNumber,
           size: size.isNotEmpty ? size : current.size,
-          seqId: seq.isNotEmpty ? seq : current.seqId,
+          seqId: hasSupplyContext && seq.isNotEmpty ? seq : current.seqId,
           itemId: itemIdValue ?? current.itemId,
           unitId: unitIdValue ?? current.unitId,
-          raw: Map<String, dynamic>.from(selected),
+          raw: selectionRaw,
         );
       });
     } catch (e) {
@@ -1098,7 +1113,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         heatNumber: '',
         description: '',
         size: '',
-        seqId: (_detailItems.length + 1).toString(),
+        seqId: '0',
       ));
     });
   }
