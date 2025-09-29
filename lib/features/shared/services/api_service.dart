@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
@@ -875,33 +877,6 @@ class ApiService {
       };
     }
 
-    int? newId;
-    try {
-      final data = headerRes['data'] as Map<String, dynamic>;
-      final tbl0 = data['tbl0'] as List?;
-      if (tbl0 != null && tbl0.isNotEmpty) {
-        final first = (tbl0.first as Map).cast<String, dynamic>();
-        final resultMsg = first['Result']?.toString();
-        final idField = first['Supply_ID'] ?? first['ID'] ?? first['SupplyId'];
-        newId = idField is int ? idField : int.tryParse(idField?.toString() ?? '');
-        if (newId == null && resultMsg != null) {
-          final match = RegExp(r"ID\s*[:=]\s*(\d+)").firstMatch(resultMsg);
-          if (match != null) {
-            newId = int.tryParse(match.group(1)!);
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (newId == null) {
-      return {
-        'success': false,
-        'message': 'Header saved but Supply_ID not returned',
-      };
-    }
-
-    final detailResults = <Map<String, dynamic>>[];
-    bool allDetailsOk = true;
     int? _toInt(dynamic value) {
       if (value == null) return null;
       if (value is int) return value;
@@ -911,6 +886,180 @@ class ApiService {
       return int.tryParse(text);
     }
 
+    int? _extractIdFromMessage(String message) {
+      final match = RegExp(r'(?:Supply[_\s]?ID|ID)\s*[:=]\s*(\d+)').firstMatch(message);
+      if (match != null) {
+        return int.tryParse(match.group(1)!);
+      }
+      return null;
+    }
+
+    int? _extractId(dynamic node) {
+      if (node is Map) {
+        for (final entry in node.entries) {
+          final key = entry.key.toString().toLowerCase();
+          if (key.contains('supply') && key.contains('id')) {
+            final parsed = _toInt(entry.value);
+            if (parsed != null && parsed > 0) return parsed;
+          }
+          final nested = _extractId(entry.value);
+          if (nested != null) return nested;
+        }
+      } else if (node is List) {
+        for (final item in node) {
+          final nested = _extractId(item);
+          if (nested != null) return nested;
+        }
+      } else if (node is String) {
+        return _extractIdFromMessage(node);
+      }
+      return null;
+    }
+
+    String? _extractSupplyNo(dynamic node) {
+      if (node is Map) {
+        for (final entry in node.entries) {
+          final key = entry.key.toString().toLowerCase();
+          if (key.contains('supply') && key.contains('no')) {
+            final value = entry.value?.toString();
+            if (value != null && value.trim().isNotEmpty) {
+              return value.trim();
+            }
+          }
+          final nested = _extractSupplyNo(entry.value);
+          if (nested != null) return nested;
+        }
+      } else if (node is List) {
+        for (final item in node) {
+          final nested = _extractSupplyNo(item);
+          if (nested != null) return nested;
+        }
+      }
+      return null;
+    }
+
+    DateTime? _parseDdMmmYyyy(String input) {
+      final match = RegExp(r'^(\d{1,2})-([A-Za-z]{3})-(\d{4})$').firstMatch(input.trim());
+      if (match == null) return null;
+      const months = {
+        'jan': 1,
+        'feb': 2,
+        'mar': 3,
+        'apr': 4,
+        'may': 5,
+        'jun': 6,
+        'jul': 7,
+        'aug': 8,
+        'sep': 9,
+        'oct': 10,
+        'nov': 11,
+        'dec': 12,
+      };
+      final day = int.tryParse(match.group(1)!);
+      final month = months[match.group(2)!.toLowerCase()];
+      final year = int.tryParse(match.group(3)!);
+      if (day == null || month == null || year == null) return null;
+      return DateTime(year, month, day);
+    }
+
+    Future<int?> _fetchSupplyIdAfterSave({
+      required DateTime? supplyDate,
+      String? expectedSupplyNo,
+    }) async {
+      try {
+        final baseDate = supplyDate ?? DateTime.now();
+        final start = DateTime(baseDate.year, baseDate.month, baseDate.day).subtract(const Duration(days: 3));
+        final end = DateTime(baseDate.year, baseDate.month, baseDate.day).add(const Duration(days: 3));
+        final minStart = DateTime(2020, 1, 1);
+        final adjustedStart = start.isBefore(minStart) ? minStart : start;
+        var adjustedEnd = end;
+        if (adjustedEnd.isBefore(adjustedStart)) {
+          adjustedEnd = adjustedStart.add(const Duration(days: 3));
+        }
+        final browse = await getSupplyStock(
+          dateStart: adjustedStart,
+          dateEnd: adjustedEnd,
+        );
+        if (browse['success'] != true) {
+          return null;
+        }
+        final data = browse['data'];
+        if (data is! Map<String, dynamic>) {
+          return null;
+        }
+        final rows = data['tbl1'];
+        if (rows is! List) {
+          return null;
+        }
+        int? fallbackMaxId;
+        for (final row in rows.whereType<Map>()) {
+          final map = row.cast<dynamic, dynamic>();
+          final rowId = _toInt(map['Supply_ID'] ?? map['SupplyId'] ?? map['ID']);
+          final rowNo = map['Supply_No']?.toString() ?? map['SupplyNo']?.toString();
+          if (expectedSupplyNo != null && rowNo != null) {
+            if (rowNo.trim().toLowerCase() == expectedSupplyNo.trim().toLowerCase()) {
+              if (rowId != null && rowId > 0) {
+                return rowId;
+              }
+            }
+          }
+          if (rowId != null && rowId > 0) {
+            if (fallbackMaxId == null || rowId > fallbackMaxId) {
+              fallbackMaxId = rowId;
+            }
+          }
+        }
+        return fallbackMaxId;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    int? newId;
+    String? resolvedSupplyNo;
+    try {
+      final rawData = headerRes['data'];
+      if (rawData is Map<String, dynamic>) {
+        newId ??= _extractId(rawData);
+        resolvedSupplyNo = _extractSupplyNo(rawData);
+        final message = (rawData['msg'] ?? rawData['Message'] ?? rawData['result'])?.toString();
+        if (newId == null && message != null) {
+          newId = _extractIdFromMessage(message);
+        }
+      }
+    } catch (_) {}
+
+    final supplyDate = _parseDdMmmYyyy(supplyDateDdMmmYyyy);
+    final supplyNoHint = (supplyNo.isNotEmpty && supplyNo.toUpperCase() != 'AUTO')
+        ? supplyNo
+        : resolvedSupplyNo;
+
+    if (newId == null) {
+      newId = await _fetchSupplyIdAfterSave(
+        supplyDate: supplyDate,
+        expectedSupplyNo: supplyNoHint,
+      );
+    }
+
+    if (newId == null) {
+      return {
+        'success': false,
+        'message': 'Header saved but Supply_ID not returned',
+      };
+    }
+
+    if (resolvedSupplyNo == null || resolvedSupplyNo.isEmpty) {
+      resolvedSupplyNo = supplyNoHint;
+    }
+
+    if (kDebugMode && resolvedSupplyNo != null) {
+      debugPrint('Resolved Supply_No after save: $resolvedSupplyNo (Supply_ID: $newId)');
+    }
+
+    final detailSupplyId = newId;
+
+    final detailResults = <Map<String, dynamic>>[];
+    bool allDetailsOk = true;
     for (var i = 0; i < details.length; i++) {
       final d = details[i];
       final itemId = _toInt(d['itemId']) ?? 0;
@@ -934,8 +1083,23 @@ class ApiService {
           ? d['seqId'].toString().trim()
           : '0';
 
+      if (kDebugMode) {
+        final payloadPreview = {
+          'supplyId': detailSupplyId,
+          'seqId': seqId,
+          'itemId': itemId,
+          'qty': qty,
+          'unitId': unitId,
+          'lotNumber': lotNumber,
+          'heatNumber': heatNumber,
+          'size': size,
+          'description': description,
+        };
+        debugPrint('createSupplyWithDetails → detail ${i + 1} payload: ${jsonEncode(payloadPreview)}');
+      }
+
       final res = await saveSupplyDetail(
-        supplyId: newId,
+        supplyId: detailSupplyId,
         seqId: seqId,
         itemId: itemId,
         qty: qty,
@@ -949,6 +1113,9 @@ class ApiService {
 
       if (res['success'] != true) {
         allDetailsOk = false;
+      }
+      if (kDebugMode) {
+        debugPrint('createSupplyWithDetails ← detail ${i + 1} result: ${jsonEncode(res)}');
       }
       detailResults.add({
         'index': i,
