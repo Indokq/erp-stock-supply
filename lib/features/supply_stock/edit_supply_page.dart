@@ -6,6 +6,7 @@ import 'models/supply_detail_item.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
 import '../shared/services/auth_service.dart';
+import '../shared/services/barcode_scanner_service.dart';
 
 class EditSupplyPage extends StatefulWidget {
   const EditSupplyPage({
@@ -780,6 +781,290 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     );
   }
 
+  SupplyDetailItem _mergeDetailItemFromStock({
+    required SupplyDetailItem current,
+    required Map<String, dynamic> primaryData,
+    Map<String, dynamic>? fallbackRaw,
+  }) {
+    String? resolveValue(List<String> keys, {List<String> partialMatches = const []}) {
+      final primary = _getStringValue(primaryData, keys, partialMatches: partialMatches);
+      if (primary != null && primary.trim().isNotEmpty) {
+        return primary.trim();
+      }
+      if (fallbackRaw == null) return null;
+      final fallback = _getStringValue(fallbackRaw!, keys, partialMatches: partialMatches);
+      if (fallback == null) return null;
+      final trimmed = fallback.trim();
+      return trimmed.isNotEmpty ? trimmed : null;
+    }
+
+    final combinedRaw = <String, dynamic>{};
+    if (fallbackRaw != null) {
+      combinedRaw.addAll(fallbackRaw);
+    }
+    combinedRaw.addAll(primaryData);
+
+    final itemCode = resolveValue(
+      const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+      partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+    );
+    final itemName = resolveValue(
+      const [
+        'Item_Name',
+        'ItemName',
+        'Name',
+        'Description',
+        'colName',
+        'colname',
+        'ColName',
+        'Colname',
+      ],
+      partialMatches: const ['itemname', 'description', 'colname'],
+    );
+    final lot = resolveValue(
+      const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+      partialMatches: const ['lot', 'batch'],
+    );
+    final heat = resolveValue(
+      const ['Heat_No', 'HeatNo', 'Heat_Number'],
+      partialMatches: const ['heat', 'heatno'],
+    );
+    final unit = resolveValue(
+      const ['Unit', 'UOM', 'OrderUnit', 'Unit_Stock'],
+      partialMatches: const ['unit', 'uom', 'stockunit'],
+    );
+    final size = resolveValue(
+      const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
+      partialMatches: const ['size', 'dimension'],
+    );
+    final qtyString = resolveValue(
+      const ['Qty', 'Quantity', 'Qty_Available', 'Qty_Order', 'Balance', 'Stock'],
+      partialMatches: const ['qty', 'quantity', 'balance', 'stock'],
+    );
+    final description = resolveValue(
+      const ['Description', 'Desc', 'Remark', 'Remarks', 'Notes'],
+      partialMatches: const ['desc', 'remark', 'remarks', 'notes'],
+    );
+    final parsedQty = qtyString != null
+        ? double.tryParse(qtyString.replaceAll(',', '.'))
+        : null;
+
+    final itemId = _extractIntValue(
+      combinedRaw,
+      const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'ID'],
+      partialMatches: const ['itemid', 'stockid', 'id'],
+    );
+    final unitId = _extractIntValue(
+      combinedRaw,
+      const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID', 'Unit_Stock'],
+      partialMatches: const ['unitid', 'uomid', 'unitstock'],
+    );
+
+    final seqCandidate = _getStringValue(
+      combinedRaw,
+      const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
+      partialMatches: const ['seq'],
+    );
+
+    final seqId = _rawHasSupplyContext(combinedRaw)
+        ? ((seqCandidate != null && seqCandidate.trim().isNotEmpty) ? seqCandidate.trim() : current.seqId)
+        : current.seqId;
+
+    return current.copyWith(
+      itemCode: itemCode?.isNotEmpty == true ? itemCode : current.itemCode,
+      itemName: itemName?.isNotEmpty == true ? itemName : current.itemName,
+      lotNumber: lot?.isNotEmpty == true ? lot : current.lotNumber,
+      heatNumber: heat?.isNotEmpty == true ? heat : current.heatNumber,
+      unit: unit?.isNotEmpty == true ? unit : current.unit,
+      size: size?.isNotEmpty == true ? size : current.size,
+      qty: parsedQty ?? current.qty,
+      description: description?.isNotEmpty == true ? description : current.description,
+      seqId: seqId,
+      itemId: itemId ?? current.itemId,
+      unitId: unitId ?? current.unitId,
+      raw: combinedRaw.isEmpty ? current.raw : combinedRaw,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchStockMatchesByBarcode({
+    required int warehouseId,
+    required String code,
+  }) async {
+    final dateStr = _supplyDate.toIso8601String().split('T').first;
+    final result = await ApiService.browseItemStockByLot(
+      id: warehouseId,
+      companyId: 1,
+      dateStart: dateStr,
+      dateEnd: dateStr,
+    );
+
+    if (result['success'] != true) {
+      final message = result['message']?.toString() ?? 'Tidak dapat memuat data item stock';
+      throw Exception(message);
+    }
+
+    final data = result['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Data item stock tidak tersedia');
+    }
+
+    final rows = _extractRows(data);
+    if (rows.isEmpty) {
+      return const [];
+    }
+
+    final normalized = code.trim().toLowerCase();
+    final numericCode = _tryParseInt(code);
+
+    var matches = rows.where((row) {
+      final rowCode = _getStringValue(
+        row,
+        const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'Barcode', 'Bar_Code'],
+        partialMatches: const ['itemcode', 'kode', 'barcode', 'code', 'sku'],
+      );
+      final lot = _getStringValue(
+        row,
+        const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+        partialMatches: const ['lot', 'batch'],
+      );
+      final numericId = _extractIntValue(
+        row,
+        const ['Item_ID', 'ItemId', 'ID'],
+        partialMatches: const ['itemid', 'stockid', 'id'],
+      );
+
+      final codeMatches = rowCode != null && rowCode.trim().toLowerCase() == normalized;
+      final lotMatches = lot != null && lot.trim().toLowerCase() == normalized;
+      final idMatches = numericCode != null && numericId != null && numericId == numericCode;
+
+      return codeMatches || lotMatches || idMatches;
+    }).map((row) => row.map((key, value) => MapEntry(key.toString(), value))).toList();
+
+    if (matches.isEmpty) {
+      matches = rows.where((row) {
+        final rowCode = _getStringValue(
+          row,
+          const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+          partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+        );
+        if (rowCode == null) return false;
+        return rowCode.trim().toLowerCase().contains(normalized);
+      }).map((row) => row.map((key, value) => MapEntry(key.toString(), value))).toList();
+    }
+
+    return matches;
+  }
+
+  Future<Map<String, dynamic>?> _showScanMatchesSelectionSheet({
+    required List<Map<String, dynamic>> matches,
+    required String scannedCode,
+  }) {
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hasil scan "$scannedCode"',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(8),
+                    itemBuilder: (context, index) {
+                      final row = matches[index];
+                      final codeValue = _getStringValue(
+                        row,
+                        const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+                        partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+                      );
+                      final name = _getStringValue(
+                        row,
+                        const [
+                          'Item_Name',
+                          'ItemName',
+                          'Name',
+                          'Description',
+                          'colName',
+                          'colname',
+                          'ColName',
+                          'Colname',
+                        ],
+                        partialMatches: const ['itemname', 'description', 'colname'],
+                      );
+                      final lot = _getStringValue(
+                        row,
+                        const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+                        partialMatches: const ['lot', 'batch'],
+                      );
+                      final qty = _getStringValue(
+                        row,
+                        const ['Qty', 'Quantity', 'Qty_Available', 'Qty_Order', 'Balance', 'Stock'],
+                        partialMatches: const ['qty', 'quantity', 'balance', 'stock'],
+                      );
+
+                      final subtitleParts = <String>[];
+                      if (lot != null && lot.isNotEmpty) subtitleParts.add('Lot: $lot');
+                      if (qty != null && qty.isNotEmpty) subtitleParts.add('Qty: $qty');
+
+                      return ListTile(
+                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryBlue),
+                        title: Text(
+                          name?.isNotEmpty == true ? name! : (codeValue ?? 'Item ${index + 1}'),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: subtitleParts.isEmpty ? null : Text(subtitleParts.join(' • ')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(sheetContext).pop(row),
+                      );
+                    },
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemCount: matches.length,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   int? _extractSupplyIdFromResponse(dynamic payload) {
     if (payload is! Map<String, dynamic>) return null;
     final tbl0 = payload['tbl0'];
@@ -1126,9 +1411,23 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
+                          if (!widget.readOnly)
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_scanner),
+                              tooltip: 'Scan QR Code',
+                              onPressed: () {
+                                Navigator.of(sheetContext).pop();
+                                _scanQRForDetailItem(index);
+                              },
+                            ),
+                        ],
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1185,45 +1484,105 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       );
 
       if (!mounted || selected == null) return;
+      final selectionRaw = Map<String, dynamic>.from(selected);
+      final updated = _mergeDetailItemFromStock(
+        current: _detailItems[index],
+        primaryData: selectionRaw,
+      );
       setState(() {
-        final code = _getStringValue(selected, const ['Item_Code', 'Code', 'SKU'], partialMatches: const ['code', 'sku']) ?? '';
-        final name = _getStringValue(selected, const ['Item_Name', 'Name', 'Title', 'Description'], partialMatches: const ['name', 'title', 'desc']) ?? '';
-        final lot = _getStringValue(selected, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
-        final heat = _getStringValue(selected, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
-        final unit = _getStringValue(selected, const ['Unit', 'UOM', 'OrderUnit', 'Unit_Name'], partialMatches: const ['unit', 'uom']) ?? '';
-        final size = _getStringValue(selected, const ['Size', 'Item_Size'], partialMatches: const ['size']) ?? '';
-        final seq = _getStringValue(selected, const ['Seq_ID', 'SeqId', 'Sequence', 'Seq'], partialMatches: const ['seq']) ?? '';
-        final itemIdValue = _extractIntValue(
-          selected,
-          const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'Item_Index', 'ItemIDX', 'ItemIdx', 'ID'],
-          partialMatches: const ['itemid', 'item_idx', 'itemindex'],
-        );
-        final unitIdValue = _extractIntValue(
-          selected,
-          const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID', 'Unit_Stock'],
-          partialMatches: const ['unitid', 'uomid', 'unitstock'],
-        );
-
-        final selectionRaw = Map<String, dynamic>.from(selected);
-        final hasSupplyContext = _rawHasSupplyContext(selectionRaw);
-
-        final current = _detailItems[index];
-        _detailItems[index] = current.copyWith(
-          itemCode: code.isNotEmpty ? code : current.itemCode,
-          itemName: name.isNotEmpty ? name : current.itemName,
-          unit: unit.isNotEmpty ? unit : current.unit,
-          lotNumber: lot.isNotEmpty ? lot : current.lotNumber,
-          heatNumber: heat.isNotEmpty ? heat : current.heatNumber,
-          size: size.isNotEmpty ? size : current.size,
-          seqId: hasSupplyContext && seq.isNotEmpty ? seq : current.seqId,
-          itemId: itemIdValue ?? current.itemId,
-          unitId: unitIdValue ?? current.unitId,
-          raw: selectionRaw,
-        );
+        _detailItems[index] = updated;
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error browse item: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  Future<void> _scanQRForDetailItem(int index) async {
+    if (widget.readOnly) return;
+
+    final fromId = _tryParseInt(_supplyFromId) ?? _tryParseInt(widget.header.fromId) ?? 0;
+    if (fromId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih gudang From terlebih dahulu sebelum scan barcode'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final scanResult = await BarcodeScannerService.instance.scanBarcode();
+    if (scanResult.isCanceled) {
+      return;
+    }
+    if (!scanResult.isSuccess) {
+      final message = scanResult.message;
+      if (message != null && message.trim().isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    final scannedCode = scanResult.barcode!.trim();
+    if (scannedCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Barcode tidak terbaca.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    try {
+      final matches = await _fetchStockMatchesByBarcode(
+        warehouseId: fromId,
+        code: scannedCode,
+      );
+
+      if (matches.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Barang dengan barcode "$scannedCode" tidak ditemukan di gudang ini.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      Map<String, dynamic>? chosen;
+      if (matches.length == 1) {
+        chosen = matches.first;
+      } else {
+        chosen = await _showScanMatchesSelectionSheet(
+          matches: matches,
+          scannedCode: scannedCode,
+        );
+        if (!mounted || chosen == null) {
+          return;
+        }
+      }
+
+      final selectionRaw = Map<String, dynamic>.from(chosen!);
+      final updated = _mergeDetailItemFromStock(
+        current: _detailItems[index],
+        primaryData: selectionRaw,
+      );
+      if (!mounted) return;
+      setState(() {
+        _detailItems[index] = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memproses barcode: $e'), backgroundColor: Colors.redAccent),
       );
     }
   }

@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
 import '../shared/services/auth_service.dart';
+import '../shared/services/barcode_scanner_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'models/supply_header.dart';
 import 'models/supply_detail_item.dart';
@@ -2342,108 +2343,374 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
   }
 
-  Future<void> _scanQRForDetailItem(int rowIndex) async {
-    // Validate warehouse is selected first
-    final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
-    if (fromId == 0) {
-      _showErrorMessage('Pilih gudang From terlebih dahulu sebelum scan QR');
-      return;
+  SupplyDetailItem _mergeDetailItemFromStock({
+    required SupplyDetailItem current,
+    required Map<String, dynamic> primaryData,
+    Map<String, dynamic>? fallbackRaw,
+  }) {
+    String? resolveValue(List<String> keys, {List<String> partialMatches = const []}) {
+      final primary = _getStringValue(
+        primaryData,
+        keys,
+        partialMatches: partialMatches,
+      );
+      if (primary != null && primary.trim().isNotEmpty) {
+        return primary.trim();
+      }
+      if (fallbackRaw == null) return null;
+      final fallback = _getStringValue(
+        fallbackRaw!,
+        keys,
+        partialMatches: partialMatches,
+      );
+      if (fallback == null) return null;
+      final trimmedFallback = fallback.trim();
+      return trimmedFallback.isNotEmpty ? trimmedFallback : null;
     }
 
-    try {
-      // TODO: Implement QR scanner integration
-      // For now, show a placeholder dialog
-      final result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.qr_code_scanner, color: AppColors.primaryBlue),
-              const SizedBox(width: 8),
-              const Text('QR Scanner'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warehouse_outlined, size: 16, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Scanning from: ${_supplyFromController.text}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Icon(Icons.qr_code_scanner, size: 64, color: AppColors.primaryBlue),
-              const SizedBox(height: 16),
-              const Text('QR Scanner functionality will be implemented here'),
-              const SizedBox(height: 16),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Manual QR Code Input (for testing)',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (value) => Navigator.of(context).pop(value),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
+    final combinedRaw = <String, dynamic>{};
+    if (fallbackRaw != null) {
+      combinedRaw.addAll(fallbackRaw);
+    }
+    combinedRaw.addAll(primaryData);
+
+    final itemCode = resolveValue(
+      const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode'],
+      partialMatches: const ['itemcode', 'kode', 'code'],
+    );
+    final itemName = resolveValue(
+      const [
+        'Item_Name',
+        'ItemName',
+        'Name',
+        'Description',
+        'colName',
+        'colname',
+        'ColName',
+        'Colname',
+        'colName1',
+        'colname1',
+      ],
+      partialMatches: const ['itemname', 'description', 'colname', 'namestock', 'namabarang'],
+    );
+    final lot = resolveValue(
+      const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+      partialMatches: const ['lot', 'batch'],
+    );
+    final heat = resolveValue(
+      const ['Heat_No', 'HeatNo', 'Heat_Number'],
+      partialMatches: const ['heat', 'heatno', 'heattreatment'],
+    );
+    final unit = resolveValue(
+      const ['Unit', 'Unit_Stock', 'UOM', 'OrderUnit'],
+      partialMatches: const ['unit', 'uom', 'stockunit'],
+    );
+    final size = resolveValue(
+      const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
+      partialMatches: const ['size', 'dimension'],
+    );
+    final qtyString = resolveValue(
+      const ['Qty', 'Quantity', 'Qty_Available', 'Qty_Order', 'Balance', 'Unit_Stock', 'Stock'],
+      partialMatches: const ['qty', 'quantity', 'jumlah', 'balance', 'stock'],
+    );
+    final description = resolveValue(
+      const ['Description', 'Desc', 'Remark', 'Remarks', 'Notes'],
+      partialMatches: const ['desc', 'remark', 'remarks', 'notes', 'keterangan'],
+    );
+    final parsedQty = qtyString != null
+        ? double.tryParse(qtyString.replaceAll(',', '.'))
+        : null;
+
+    final itemId = _parseIntValue(
+      _getFirstValue(
+        combinedRaw,
+        const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'ID'],
+        partialMatches: const ['itemid', 'stockid', 'id'],
+      ),
+    );
+    final unitId = _parseIntValue(
+      _getFirstValue(
+        combinedRaw,
+        const ['Unit_ID', 'UnitId', 'UnitID', 'UOM_ID', 'Unit_Stock'],
+        partialMatches: const ['unitid', 'uomid', 'unitstock'],
+      ),
+    );
+
+    final seqCandidate = _getStringValue(
+      combinedRaw,
+      const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
+      partialMatches: const ['seq'],
+    );
+
+    final seqId = _rawHasSupplyContext(combinedRaw)
+        ? ((seqCandidate != null && seqCandidate.trim().isNotEmpty) ? seqCandidate.trim() : current.seqId)
+        : current.seqId;
+
+    return current.copyWith(
+      itemCode: itemCode?.isNotEmpty == true ? itemCode : current.itemCode,
+      itemName: itemName?.isNotEmpty == true ? itemName : current.itemName,
+      lotNumber: lot?.isNotEmpty == true ? lot : current.lotNumber,
+      heatNumber: heat?.isNotEmpty == true ? heat : current.heatNumber,
+      unit: unit?.isNotEmpty == true ? unit : current.unit,
+      size: size?.isNotEmpty == true ? size : current.size,
+      qty: parsedQty ?? current.qty,
+      description: description?.isNotEmpty == true ? description : current.description,
+      seqId: seqId,
+      itemId: itemId ?? current.itemId,
+      unitId: unitId ?? current.unitId,
+      raw: combinedRaw.isEmpty ? current.raw : combinedRaw,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchStockMatchesByBarcode({
+    required int warehouseId,
+    required String code,
+  }) async {
+    final dateStr = _supplyDate.toIso8601String().split('T').first;
+    final result = await ApiService.browseItemStockByLot(
+      id: warehouseId,
+      companyId: 1,
+      dateStart: dateStr,
+      dateEnd: dateStr,
+    );
+
+    if (result['success'] != true) {
+      final message = result['message']?.toString() ?? 'Tidak dapat memuat data item stock';
+      throw Exception(message);
+    }
+
+    final data = result['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Data item stock tidak tersedia');
+    }
+
+    final rows = _extractRows(data);
+    if (rows.isEmpty) {
+      return const [];
+    }
+
+    final normalized = code.trim().toLowerCase();
+    final numericCode = _parseIntValue(code);
+
+    var matches = rows.where((row) {
+      final rowCode = _getStringValue(
+        row,
+        const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'Barcode', 'Bar_Code'],
+        partialMatches: const ['itemcode', 'kode', 'barcode', 'code', 'sku'],
+      );
+      final lot = _getStringValue(
+        row,
+        const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+        partialMatches: const ['lot', 'batch'],
+      );
+      final numericId = _parseIntValue(
+        _getFirstValue(
+          row,
+          const ['Item_ID', 'ItemId', 'ID'],
+          partialMatches: const ['itemid', 'stockid', 'id'],
         ),
       );
 
-      if (result != null && result.trim().isNotEmpty) {
-        // Process the QR code result
-        await _processQRCodeResult(result.trim(), rowIndex);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showErrorMessage('Error scanning QR code: $e');
+      final codeMatches = rowCode != null && rowCode.trim().toLowerCase() == normalized;
+      final lotMatches = lot != null && lot.trim().toLowerCase() == normalized;
+      final idMatches = numericCode != null && numericId != null && numericCode == numericId;
+
+      return codeMatches || lotMatches || idMatches;
+    }).map((row) => row.map((key, value) => MapEntry(key.toString(), value))).toList();
+
+    if (matches.isEmpty) {
+      matches = rows.where((row) {
+        final rowCode = _getStringValue(
+          row,
+          const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+          partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+        );
+        if (rowCode == null) return false;
+        return rowCode.trim().toLowerCase().contains(normalized);
+      }).map((row) => row.map((key, value) => MapEntry(key.toString(), value))).toList();
     }
+
+    return matches;
   }
 
-  Future<void> _processQRCodeResult(String qrData, int rowIndex) async {
+  Future<Map<String, dynamic>?> _showScanMatchesSelectionSheet({
+    required List<Map<String, dynamic>> matches,
+    required String scannedCode,
+  }) {
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hasil scan "$scannedCode"',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(8),
+                    itemBuilder: (context, index) {
+                      final row = matches[index];
+                      final code = _getStringValue(
+                        row,
+                        const ['Item_Code', 'ItemCode', 'Code', 'SKU'],
+                        partialMatches: const ['itemcode', 'kode', 'code', 'sku'],
+                      );
+                      final name = _getStringValue(
+                        row,
+                        const [
+                          'Item_Name',
+                          'ItemName',
+                          'Name',
+                          'Description',
+                          'colName',
+                          'colname',
+                          'ColName',
+                          'Colname',
+                        ],
+                        partialMatches: const ['itemname', 'description', 'colname'],
+                      );
+                      final lot = _getStringValue(
+                        row,
+                        const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+                        partialMatches: const ['lot', 'batch'],
+                      );
+                      final qty = _getStringValue(
+                        row,
+                        const ['Qty', 'Quantity', 'Qty_Available', 'Qty_Order', 'Balance', 'Stock'],
+                        partialMatches: const ['qty', 'quantity', 'balance', 'stock'],
+                      );
+
+                      final subtitleParts = <String>[];
+                      if (lot != null && lot.isNotEmpty) subtitleParts.add('Lot: $lot');
+                      if (qty != null && qty.isNotEmpty) subtitleParts.add('Qty: $qty');
+
+                      return ListTile(
+                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryBlue),
+                        title: Text(
+                          name?.isNotEmpty == true ? name! : (code ?? 'Item ${index + 1}'),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: subtitleParts.isEmpty ? null : Text(subtitleParts.join(' • ')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(sheetContext).pop(row),
+                      );
+                    },
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemCount: matches.length,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _scanQRForDetailItem(int rowIndex) async {
+    final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
+    if (fromId == 0) {
+      _showErrorMessage('Pilih gudang From terlebih dahulu sebelum scan barcode');
+      return;
+    }
+
+    final scanResult = await BarcodeScannerService.instance.scanBarcode();
+    if (scanResult.isCanceled) {
+      return;
+    }
+    if (!scanResult.isSuccess) {
+      if (scanResult.message != null && scanResult.message!.trim().isNotEmpty) {
+        _showErrorMessage(scanResult.message!);
+      }
+      return;
+    }
+
+    final scannedCode = scanResult.barcode!.trim();
+    if (scannedCode.isEmpty) {
+      _showErrorMessage('Barcode tidak terbaca.');
+      return;
+    }
+
     setState(() => _isLoading = true);
-
     try {
-      // Parse QR data - adjust this based on your QR code format
-      // Example: if QR contains item code or item ID
-      final Map<String, dynamic> qrResult = {
-        'Item_Code': qrData,
-        // Add other fields based on your QR code format
-      };
-
-      // Apply the QR result to the detail item
-      final currentDetail = _detailItems[rowIndex];
-      final updated = currentDetail.copyWith(
-        itemCode: qrData,
-        // Update other fields as needed based on QR data
+      final matches = await _fetchStockMatchesByBarcode(
+        warehouseId: fromId,
+        code: scannedCode,
       );
 
-      _updateDetailItem(rowIndex, updated);
+      if (matches.isEmpty) {
+        _showErrorMessage('Barang dengan barcode "$scannedCode" tidak ditemukan di gudang ini.');
+        return;
+      }
 
+      Map<String, dynamic>? chosen;
+      if (matches.length == 1) {
+        chosen = matches.first;
+      } else {
+        chosen = await _showScanMatchesSelectionSheet(
+          matches: matches,
+          scannedCode: scannedCode,
+        );
+        if (!mounted || chosen == null) {
+          return;
+        }
+      }
+
+      final selectionRaw = Map<String, dynamic>.from(chosen!);
+      final detail = await _fetchItemDetail(selectionRaw);
+      final source = detail ?? selectionRaw;
+      _applyItemSelection(source);
+      final updated = _mergeDetailItemFromStock(
+        current: _detailItems[rowIndex],
+        primaryData: source,
+        fallbackRaw: selectionRaw,
+      );
+      _updateDetailItem(rowIndex, updated);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('QR Code processed: $qrData'),
+          content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
           backgroundColor: AppColors.success,
         ),
       );
     } catch (e) {
-      _showErrorMessage('Error processing QR code: $e');
+      _showErrorMessage('Gagal memproses barcode: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -2627,27 +2894,14 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
       if (!mounted || selected == null) return;
 
-      final currentDetail = _detailItems[rowIndex];
       final selectionRaw = Map<String, dynamic>.from(selected);
-      final hasSupplyContext = _rawHasSupplyContext(selectionRaw);
-      final resolvedSeqId = hasSupplyContext
-          ? (_getStringValue(selectionRaw, const ['Seq_ID','SeqId','SEQ','Seq'], partialMatches: const ['seq','sequence']) ?? currentDetail.seqId)
-          : currentDetail.seqId;
-
-      // Map selection into the target row
-      final updated = currentDetail.copyWith(
-        itemCode: _getStringValue(selectionRaw, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']) ?? currentDetail.itemCode,
-        itemName: _getStringValue(selectionRaw, const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'], partialMatches: const ['itemname','description','colname','namestock','namabarang']) ?? currentDetail.itemName,
-        lotNumber: _getStringValue(selectionRaw, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']) ?? currentDetail.lotNumber,
-        heatNumber: _getStringValue(selectionRaw, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']) ?? currentDetail.heatNumber,
-        unit: _getStringValue(selectionRaw, const ['Unit','Item_Unit','UOM','Unit_Stock'], partialMatches: const ['unit','uom','stockunit']) ?? currentDetail.unit,
-        qty: double.tryParse((_getStringValue(selectionRaw, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']) ?? '').replaceAll(',', '.')) ?? currentDetail.qty,
-        description: _getStringValue(selectionRaw, const ['Description','Desc','Remark','Remarks'], partialMatches: const ['desc','remark','remarks','keterangan']) ?? currentDetail.description,
-        size: _getStringValue(selectionRaw, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']) ?? currentDetail.size,
-        itemId: _parseIntValue(_getFirstValue(selectionRaw, const ['Item_ID','ItemId','ID'], partialMatches: const ['itemid','stockid','id'])) ?? currentDetail.itemId,
-        unitId: _parseIntValue(_getFirstValue(selectionRaw, const ['Unit_ID','UnitId','UOM_ID','UomId','Item_Unit_ID','Unit_Stock'], partialMatches: const ['unitid','uomid','unitstock'])) ?? currentDetail.unitId,
-        seqId: resolvedSeqId,
-        raw: selectionRaw,
+      final detail = await _fetchItemDetail(selectionRaw);
+      final source = detail ?? selectionRaw;
+      _applyItemSelection(source);
+      final updated = _mergeDetailItemFromStock(
+        current: _detailItems[rowIndex],
+        primaryData: source,
+        fallbackRaw: selectionRaw,
       );
       _updateDetailItem(rowIndex, updated);
     } catch (e) {
