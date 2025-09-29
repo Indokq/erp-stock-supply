@@ -41,10 +41,15 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   // Order Information
   final _orderNoController = TextEditingController();
   final _projectNoController = TextEditingController();
+  final _orderIdController = TextEditingController();
+  final _orderSeqIdController = TextEditingController();
   final _itemCodeController = TextEditingController();
   final _itemNameController = TextEditingController();
   final _qtyOrderController = TextEditingController();
   final _heatNoController = TextEditingController();
+  final _orderUnitController = TextEditingController();
+  final _sizeController = TextEditingController();
+  final _lotNumberController = TextEditingController();
 
   // References / Template
   final _refNoController = TextEditingController();
@@ -61,9 +66,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   final _preparedByController = TextEditingController();
   final _approvedByController = TextEditingController();
   final _receivedByController = TextEditingController();
-
-  // Extra columns
-  final _column1Controller = TextEditingController();
 
   // Detail state
   final TextEditingController _searchController = TextEditingController();
@@ -164,6 +166,17 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     _supplyNumberController.dispose();
     _supplyFromController.dispose();
     _supplyToController.dispose();
+    _orderNoController.dispose();
+    _projectNoController.dispose();
+    _orderIdController.dispose();
+    _orderSeqIdController.dispose();
+    _itemCodeController.dispose();
+    _itemNameController.dispose();
+    _qtyOrderController.dispose();
+    _heatNoController.dispose();
+    _orderUnitController.dispose();
+    _sizeController.dispose();
+    _lotNumberController.dispose();
     _refNoController.dispose();
     _remarksController.dispose();
     _templateNameController.dispose();
@@ -183,6 +196,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
     _orderId = header.orderId == 0 ? null : header.orderId;
     _orderSeqId = header.orderSeqId == 0 ? null : header.orderSeqId.toString();
+    _orderIdController.text = _orderId?.toString() ?? '';
+    _orderSeqIdController.text = _orderSeqId ?? '';
     if (header.orderNo.isNotEmpty) _orderNoController.text = header.orderNo;
     if (header.projectNo.isNotEmpty) _projectNoController.text = header.projectNo;
     if (header.itemCode.isNotEmpty) _itemCodeController.text = header.itemCode;
@@ -191,6 +206,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       _qtyOrderController.text = header.qty!.toString();
     }
     if (header.heatNumber.isNotEmpty) _heatNoController.text = header.heatNumber;
+    if (header.orderUnit.isNotEmpty) _orderUnitController.text = header.orderUnit;
+    if (header.size.isNotEmpty) _sizeController.text = header.size;
+    if (header.lotNumber.isNotEmpty) _lotNumberController.text = header.lotNumber;
 
     _refNoController.text = header.refNo;
     _remarksController.text = header.remarks;
@@ -969,6 +987,67 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     setState(() {});
   }
 
+  Future<void> _editDetailItem(int index) async {
+    if (widget.readOnly) return;
+    if (index < 0 || index >= _detailItems.length) return;
+
+    final currentItem = _detailItems[index];
+
+    final editedItem = await showModalBottomSheet<SupplyDetailItem>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.edit, color: AppColors.primaryBlue),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Edit Detail Item',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: EditDetailForm(
+                      initialItem: currentItem,
+                      onSave: (editedItem) => Navigator.pop(sheetContext, editedItem),
+                      onCancel: () => Navigator.pop(sheetContext),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (editedItem != null) {
+      setState(() {
+        _detailItems[index] = editedItem;
+      });
+    }
+  }
+
   Future<void> _browseItemStock(int index) async {
     try {
       final fromId = _tryParseInt(_supplyFromId) ?? _tryParseInt(widget.header.fromId) ?? 0;
@@ -1218,6 +1297,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     // Unsaved row (no seq or seq == 0) can be removed locally
     if (seqId.isEmpty || seqId == '0' || supplyId <= 0) {
       setState(() => _detailItems.removeAt(index));
+
+      // Check if all detail items are deleted
+      if (_detailItems.isEmpty) {
+        // Navigate to blank create supply page
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _deleteHeaderAndNavigateToBlank();
+        });
+        return; // Exit early, don't show success message
+      }
+
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Detail dihapus'),
@@ -1246,6 +1335,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       }
 
       setState(() => _detailItems.removeAt(index));
+
+      // Check if all detail items are deleted
+      if (_detailItems.isEmpty) {
+        // Navigate to blank create supply page
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _deleteHeaderAndNavigateToBlank();
+        });
+        return; // Exit early, don't show success message
+      }
+
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Detail berhasil dihapus'),
@@ -1264,6 +1363,58 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         setState(() => _deletingDetailIndexes.remove(index));
       }
     }
+  }
+
+  Future<void> _deleteHeaderAndNavigateToBlank() async {
+    final supplyIdText = _supplyIdController.text.trim();
+    final supplyId = _tryParseInt(supplyIdText) ?? widget.header.supplyId;
+
+    if (supplyId <= 0) {
+      _navigateToBlankCreatePage();
+      return;
+    }
+
+    try {
+      // Delete the header since all details are removed
+      final result = await ApiService.deleteSupply(supplyId: supplyId);
+
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Header deleted: All detail items were removed'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        final message = result['message']?.toString() ?? 'Failed to delete header';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting header: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+
+    // Always navigate to blank page regardless of delete result
+    _navigateToBlankCreatePage();
+  }
+
+  void _navigateToBlankCreatePage() {
+    // Navigate to blank create supply page
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const create_supply.CreateSupplyPage(),
+      ),
+    );
   }
 
   Future<void> _saveAll() async {
@@ -1521,10 +1672,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               Expanded(
                                                 child: TextFormField(
                                                   controller: _supplyNumberController,
-                                                  readOnly: true,
+                                                  readOnly: _isReadOnly('Supply Number'),
                                                   decoration: _inputDecoration(
                                                     'Supply Number',
-                                                    readOnly: true,
+                                                    readOnly: _isReadOnly('Supply Number'),
                                                   ),
                                                   validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                                 ),
@@ -1534,11 +1685,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                             if (_isVisible('Supply Date'))
                                               Expanded(
                                                 child: InkWell(
-                                                  onTap: _selectDate,
+                                                  onTap: _isReadOnly('Supply Date') ? null : _selectDate,
                                                   child: InputDecorator(
                                                     decoration: _inputDecoration(
                                                       'Supply Date',
-                                                      readOnly: true,
+                                                      readOnly: _isReadOnly('Supply Date'),
                                                     ).copyWith(suffixIcon: const Icon(Icons.calendar_today, size: 20)),
                                                     child: Text(
                                                       '${_supplyDate.day.toString().padLeft(2, '0')}-${_supplyDate.month.toString().padLeft(2, '0')}-${_supplyDate.year}',
@@ -1559,15 +1710,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                 child: TextFormField(
                                                   controller: _supplyFromController,
                                                   readOnly: true,
+                                                  showCursor: false,
+                                                  enableInteractiveSelection: false,
                                                   onTap: () => _pickWarehouse(isFrom: true),
                                                   decoration: _inputDecoration(
                                                     'Supply From',
                                                     readOnly: true,
                                                   ).copyWith(
-                                                    suffixIcon: IconButton(
-                                                      icon: const Icon(Icons.unfold_more_rounded),
-                                                      onPressed: () => _pickWarehouse(isFrom: true),
-                                                    ),
+                                                    suffixIcon: const Icon(Icons.warehouse_outlined),
                                                   ),
                                                 ),
                                               ),
@@ -1578,15 +1728,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                 child: TextFormField(
                                                   controller: _supplyToController,
                                                   readOnly: true,
+                                                  showCursor: false,
+                                                  enableInteractiveSelection: false,
                                                   onTap: () => _pickWarehouse(isFrom: false),
                                                   decoration: _inputDecoration(
                                                     'Supply To',
                                                     readOnly: true,
                                                   ).copyWith(
-                                                    suffixIcon: IconButton(
-                                                      icon: const Icon(Icons.unfold_more_rounded),
-                                                      onPressed: () => _pickWarehouse(isFrom: false),
-                                                    ),
+                                                    suffixIcon: const Icon(Icons.warehouse_outlined),
                                                   ),
                                                 ),
                                               ),
@@ -1618,15 +1767,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                 child: TextFormField(
                                                   controller: _orderNoController,
                                                   readOnly: true,
+                                                  showCursor: false,
+                                                  enableInteractiveSelection: false,
                                                   onTap: _browseOrderEntryItem,
                                                   decoration: _inputDecoration(
                                                     'Order No.',
                                                     readOnly: true,
                                                   ).copyWith(
-                                                    suffixIcon: IconButton(
-                                                      icon: const Icon(Icons.unfold_more_rounded),
-                                                      onPressed: _browseOrderEntryItem,
-                                                    ),
+                                                    suffixIcon: const Icon(Icons.assignment_outlined),
                                                   ),
                                                 ),
                                               ),
@@ -1708,8 +1856,42 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                               ),
                                           ],
                                         ),
-                                      // Removed Unit and Size to match order confirmation
-                                      // Removed Lot No to match desired columns
+                                      const SizedBox(height: 16),
+                                      if (_isVisible('Unit') || _isVisible('Size'))
+                                        Row(
+                                          children: [
+                                            if (_isVisible('Unit'))
+                                              Expanded(
+                                                child: TextFormField(
+                                                  controller: _orderUnitController,
+                                                  readOnly: true,
+                                                  decoration: _inputDecoration('Unit', readOnly: true),
+                                                ),
+                                              ),
+                                            if (_isVisible('Unit') && _isVisible('Size')) const SizedBox(width: 16),
+                                            if (_isVisible('Size'))
+                                              Expanded(
+                                                child: TextFormField(
+                                                  controller: _sizeController,
+                                                  readOnly: true,
+                                                  decoration: _inputDecoration('Size', readOnly: true),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      const SizedBox(height: 16),
+                                      if (_isVisible('Lot No'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _lotNumberController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration('Lot No', readOnly: true),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -1882,29 +2064,13 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                         initiallyExpanded: true,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const SectionHeader(title: 'Detail'),
-                                if (!widget.readOnly)
-                                  IconButton(
-                                    onPressed: _addDetailItem,
-                                    icon: const Icon(Icons.add),
-                                    tooltip: 'Add Item',
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                            child: TextField(
-                              controller: _searchController,
-                              decoration: const InputDecoration(
-                                hintText: 'Search',
-                                prefixIcon: Icon(Icons.search),
-                                border: OutlineInputBorder(),
-                                isDense: true,
+                            padding: const EdgeInsets.all(16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: widget.readOnly ? null : _addDetailItem,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add Item'),
                               ),
                             ),
                           ),
@@ -1917,44 +2083,51 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: const [
-                                        SizedBox(
-                                          width: 160,
-                                          child: Text('Item Code', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 240,
-                                          child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 80,
-                                          child: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 80,
-                                          child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 160,
-                                          child: Text('Lot Number', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 160,
-                                          child: Text('Heat Number', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 240,
-                                          child: Text('Description', style: TextStyle(fontWeight: FontWeight.w600)),
-                                        ),
-                                        SizedBox(width: 48),
-                                      ],
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surfaceLight,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        children: const [
+                                          SizedBox(
+                                            width: 160,
+                                            child: Text('Item Code', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 240,
+                                            child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 80,
+                                            child: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 80,
+                                            child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 160,
+                                            child: Text('Lot Number', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 160,
+                                            child: Text('Heat Number', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 240,
+                                            child: Text('Description', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          ),
+                                          SizedBox(width: 48),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
                                     Column(
@@ -1976,26 +2149,25 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                                   : () => _removeDetailItem(entry.key),
                                               readOnly: widget.readOnly,
                                               onBrowse: widget.readOnly ? null : () => _browseItemStock(entry.key),
+                                              onEdit: widget.readOnly ? null : () => _editDetailItem(entry.key),
                                             ),
                                           ),
                                         ],
                                       ],
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(18),
-                                      child: Row(
-                                        children: [
-                                          Text(
-                                            'Total Item: ${_detailItems.length}',
-                                            style: const TextStyle(fontWeight: FontWeight.w600),
-                                          ),
-                                          const SizedBox(width: 32),
-                                          Text(
-                                            'Total Qty: ${_detailItems.fold<double>(0, (sum, item) => sum + item.qty).toStringAsFixed(2)}',
-                                            style: const TextStyle(fontWeight: FontWeight.w600),
-                                          ),
-                                        ],
-                                      ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Total Item: ${_detailItems.length}',
+                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                        const SizedBox(width: 24),
+                                        Text(
+                                          'Total Qty: ${_detailItems.fold<double>(0, (sum, item) => sum + item.qty).toStringAsFixed(2)}',
+                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -2012,6 +2184,208 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class EditDetailForm extends StatefulWidget {
+  const EditDetailForm({
+    super.key,
+    required this.initialItem,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  final SupplyDetailItem initialItem;
+  final ValueChanged<SupplyDetailItem> onSave;
+  final VoidCallback onCancel;
+
+  @override
+  State<EditDetailForm> createState() => _EditDetailFormState();
+}
+
+class _EditDetailFormState extends State<EditDetailForm> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _itemCodeController;
+  late final TextEditingController _itemNameController;
+  late final TextEditingController _qtyController;
+  late final TextEditingController _unitController;
+  late final TextEditingController _lotNumberController;
+  late final TextEditingController _heatNumberController;
+  late final TextEditingController _descriptionController;
+
+  @override
+  void initState() {
+    super.initState();
+    _itemCodeController = TextEditingController(text: widget.initialItem.itemCode);
+    _itemNameController = TextEditingController(text: widget.initialItem.itemName);
+    _qtyController = TextEditingController(text: _formatQty(widget.initialItem.qty));
+    _unitController = TextEditingController(text: widget.initialItem.unit);
+    _lotNumberController = TextEditingController(text: widget.initialItem.lotNumber);
+    _heatNumberController = TextEditingController(text: widget.initialItem.heatNumber);
+    _descriptionController = TextEditingController(text: widget.initialItem.description);
+  }
+
+  @override
+  void dispose() {
+    _itemCodeController.dispose();
+    _itemNameController.dispose();
+    _qtyController.dispose();
+    _unitController.dispose();
+    _lotNumberController.dispose();
+    _heatNumberController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  String _formatQty(double qty) {
+    if (qty == 0) return '';
+    if ((qty - qty.roundToDouble()).abs() < 0.0001) {
+      return qty.toStringAsFixed(0);
+    }
+    return qty.toStringAsFixed(2);
+  }
+
+  InputDecoration _decoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+      isDense: true,
+      filled: true,
+      fillColor: AppColors.surfaceCard,
+    );
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final editedItem = widget.initialItem.copyWith(
+      itemCode: _itemCodeController.text.trim(),
+      itemName: _itemNameController.text.trim(),
+      qty: double.tryParse(_qtyController.text.trim().replaceAll(',', '.')) ?? 0,
+      unit: _unitController.text.trim(),
+      lotNumber: _lotNumberController.text.trim(),
+      heatNumber: _heatNumberController.text.trim(),
+      description: _descriptionController.text.trim(),
+    );
+
+    widget.onSave(editedItem);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Item Code and Item Name
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _itemCodeController,
+                  decoration: _decoration('Item Code'),
+                  validator: (value) => value?.trim().isEmpty == true ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  controller: _itemNameController,
+                  decoration: _decoration('Item Name'),
+                  validator: (value) => value?.trim().isEmpty == true ? 'Required' : null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Qty and Unit
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _qtyController,
+                  decoration: _decoration('Quantity'),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value?.trim().isEmpty == true) return 'Required';
+                    if (double.tryParse(value!.replaceAll(',', '.')) == null) {
+                      return 'Invalid number';
+                    }
+                    if ((double.tryParse(value.replaceAll(',', '.')) ?? 0) <= 0) {
+                      return 'Must be greater than 0';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _unitController,
+                  decoration: _decoration('Unit'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Lot Number and Heat Number
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _lotNumberController,
+                  decoration: _decoration('Lot Number'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _heatNumberController,
+                  decoration: _decoration('Heat Number'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Description
+          TextFormField(
+            controller: _descriptionController,
+            decoration: _decoration('Description'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 24),
+
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onCancel,
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }

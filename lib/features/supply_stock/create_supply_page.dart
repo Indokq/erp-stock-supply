@@ -161,7 +161,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     setState(() {
       _detailItems.removeAt(index);
       if (_detailItems.isEmpty) {
-        _detailItems = [_createEmptyDetailItem()];
+        // Langsung navigate ke halaman blank baru tanpa save
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _navigateToBlankPage();
+        });
       }
     });
   }
@@ -417,6 +420,33 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   Future<void> _saveHeaderAndProceed() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Validasi awal: Cek apakah ada detail items dan valid
+    if (_detailItems.isEmpty) {
+      _showErrorMessage('Tidak ada detail item. Header tidak akan disimpan.');
+      return;
+    }
+
+    // Cek apakah ada detail item yang benar-benar valid
+    final validItems = _detailItems.where((item) {
+      final code = item.itemCode.trim();
+      final qty = item.qty;
+      return code.isNotEmpty && qty > 0; // qty harus > 0
+    }).toList();
+
+    debugPrint('🔍 Detail validation: Total items: ${_detailItems.length}, Valid items: ${validItems.length}');
+    for (var i = 0; i < _detailItems.length; i++) {
+      final item = _detailItems[i];
+      debugPrint('  Item $i: code="${item.itemCode.trim()}", qty=${item.qty}');
+    }
+
+    if (validItems.isEmpty) {
+      debugPrint('❌ NO VALID DETAILS - BLOCKING SAVE');
+      _showErrorMessage('Semua detail item tidak valid (item code kosong atau qty = 0). Header tidak akan disimpan.');
+      return;
+    }
+
+    debugPrint('✅ VALID DETAILS FOUND - PROCEEDING WITH SAVE');
+
     // Allow manual numeric entry by falling back to text field parsing
     final resolvedFromId =
         _fromWarehouseId ?? _parseIntValue(_supplyFromController.text);
@@ -467,7 +497,13 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       for (final item in _detailItems) {
         final code = item.itemCode.trim();
         final qty = item.qty;
-        if (code.isEmpty || qty == 0) continue;
+        debugPrint('🔍 Processing item: code="$code", qty=$qty');
+
+        // Skip invalid items (same condition as validation)
+        if (code.isEmpty || qty <= 0) { // qty harus > 0, jadi skip jika <= 0
+          debugPrint('⚠️ Skipping invalid item: code="$code", qty=$qty');
+          continue;
+        }
 
         int? resolveInt(dynamic value) => _parseIntValue(value);
 
@@ -489,10 +525,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               resolveInt(item.raw?['Unit_Stock']);
         }
 
+        // Validasi setiap detail item sebelum masuk payload
+        if (resolvedItemId == null || resolvedItemId <= 0) {
+          debugPrint('❌ Invalid itemId for code: $code');
+          _showErrorMessage('Item "$code" tidak memiliki ID yang valid. Header tidak akan disimpan.');
+          return;
+        }
+
         final seqId = _resolveSeqIdForDetail(item);
 
         detailsPayload.add({
-          'itemId': resolvedItemId ?? 0,
+          'itemId': resolvedItemId,
           'qty': qty,
           'unitId': resolvedUnitId,
           'lotNumber': item.lotNumber.trim(),
@@ -503,6 +546,45 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           'raw': item.raw,
         });
       }
+
+      // Validasi: Jika tidak ada detail yang valid, jangan save header
+      debugPrint('🔍 Payload validation: detailsPayload.length = ${detailsPayload.length}');
+      if (detailsPayload.isEmpty) {
+        debugPrint('❌ EMPTY PAYLOAD - BLOCKING SAVE');
+        _showErrorMessage('Tidak ada detail item yang valid untuk disimpan. Header tidak akan disimpan.');
+        return;
+      }
+
+      // Validasi final: Pastikan semua detail dalam payload valid
+      for (int i = 0; i < detailsPayload.length; i++) {
+        final detail = detailsPayload[i];
+        final itemId = detail['itemId'];
+        final qty = detail['qty'];
+
+        if (itemId == null || itemId <= 0) {
+          debugPrint('❌ Payload item $i has invalid itemId: $itemId');
+          _showErrorMessage('Detail item ke-${i+1} memiliki ID item yang tidak valid. Header tidak akan disimpan.');
+          return;
+        }
+
+        if (qty == null || qty <= 0) {
+          debugPrint('❌ Payload item $i has invalid qty: $qty');
+          _showErrorMessage('Detail item ke-${i+1} memiliki quantity yang tidak valid. Header tidak akan disimpan.');
+          return;
+        }
+      }
+
+      debugPrint('✅ ALL PAYLOAD ITEMS VALIDATED - PROCEEDING WITH STOCK CHECK');
+
+      // Validasi stock availability sebelum save
+      try {
+        await _validateStockAvailability(detailsPayload);
+      } catch (e) {
+        debugPrint('❌ Stock validation failed: $e');
+        return; // Stop execution, error message already shown
+      }
+
+      debugPrint('✅ STOCK VALIDATION PASSED - PROCEEDING WITH API CALL');
 
       final result = await ApiService.createSupplyWithDetails(
         supplyCls: 1,
@@ -1983,6 +2065,187 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     return null;
   }
 
+  Future<void> _validateStockAvailability(List<Map<String, dynamic>> detailsPayload) async {
+    final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
+    if (fromId == 0) {
+      _showErrorMessage('Warehouse From tidak valid untuk validasi stock.');
+      throw Exception('Invalid warehouse');
+    }
+
+    for (int i = 0; i < detailsPayload.length; i++) {
+      final detail = detailsPayload[i];
+      final itemId = detail['itemId'] as int;
+      final requestedQty = detail['qty'] as double;
+      final lotNumber = detail['lotNumber'] as String;
+      final heatNumber = detail['heatNumber'] as String;
+
+      debugPrint('🔍 Checking stock for itemId: $itemId, lot: "$lotNumber", heat: "$heatNumber", requestedQty: $requestedQty');
+
+      try {
+        // Ambil data stock dari warehouse untuk item ini
+        final dateStr = _supplyDate.toIso8601String().split('T').first;
+        final stockResult = await ApiService.browseItemStockByLot(
+          id: fromId,
+          companyId: 1,
+          dateStart: dateStr,
+          dateEnd: dateStr,
+        );
+
+        if (stockResult['success'] != true) {
+          _showErrorMessage('Gagal mengecek stock untuk item ke-${i+1}. Header tidak akan disimpan.');
+          throw Exception('Stock check failed');
+        }
+
+        final stockData = stockResult['data'];
+        if (stockData is! Map<String, dynamic>) {
+          _showErrorMessage('Data stock tidak tersedia untuk validasi item ke-${i+1}. Header tidak akan disimpan.');
+          throw Exception('Stock data unavailable');
+        }
+
+        final stockItems = _extractRows(stockData);
+
+        // Cari item yang sesuai berdasarkan itemId, lot, dan heat
+        final matchingStock = stockItems.where((stockItem) {
+          final stockItemId = _parseIntValue(_getFirstValue(
+            stockItem,
+            const ['Item_ID', 'ItemId', 'ID'],
+            partialMatches: const ['itemid', 'stockid', 'id'],
+          ));
+
+          final stockLot = _getStringValue(
+            stockItem,
+            const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
+            partialMatches: const ['lot', 'batch'],
+          ) ?? '';
+
+          final stockHeat = _getStringValue(
+            stockItem,
+            const ['Heat_No', 'HeatNo', 'Heat_Number'],
+            partialMatches: const ['heat', 'heatno'],
+          ) ?? '';
+
+          return stockItemId == itemId &&
+                 stockLot.trim() == lotNumber.trim() &&
+                 stockHeat.trim() == heatNumber.trim();
+        }).toList();
+
+        if (matchingStock.isEmpty) {
+          _showErrorMessage('Item ke-${i+1} tidak ditemukan di warehouse atau lot/heat tidak sesuai. Header tidak akan disimpan.');
+          throw Exception('Item not found in stock');
+        }
+
+        // Ambil available quantity
+        final stockItem = matchingStock.first;
+        final availableQty = double.tryParse(
+          _getStringValue(
+            stockItem,
+            const ['Qty', 'Quantity', 'Qty_Available', 'Balance', 'Stock'],
+            partialMatches: const ['qty', 'quantity', 'balance', 'stock'],
+          )?.replaceAll(',', '.') ?? '0'
+        ) ?? 0.0;
+
+        debugPrint('📦 Available stock: $availableQty, Requested: $requestedQty');
+
+        if (availableQty < requestedQty) {
+          final itemCode = _getStringValue(
+            stockItem,
+            const ['Item_Code', 'ItemCode', 'Code'],
+            partialMatches: const ['itemcode', 'code'],
+          ) ?? 'Item-$itemId';
+
+          _showErrorMessage(
+            'Stock tidak cukup untuk item "$itemCode":\n'
+            'Available: ${availableQty.toStringAsFixed(2)}\n'
+            'Requested: ${requestedQty.toStringAsFixed(2)}\n'
+            'Header tidak akan disimpan.'
+          );
+          throw Exception('Insufficient stock');
+        }
+
+      } catch (e) {
+        if (e.toString().contains('Insufficient stock') ||
+            e.toString().contains('Stock check failed') ||
+            e.toString().contains('Item not found') ||
+            e.toString().contains('Invalid warehouse')) {
+          rethrow;
+        }
+        debugPrint('❌ Error checking stock: $e');
+        _showErrorMessage('Error saat mengecek stock item ke-${i+1}: $e. Header tidak akan disimpan.');
+        throw Exception('Stock validation error: $e');
+      }
+    }
+  }
+
+  void _navigateToBlankPage() {
+    // Langsung ke halaman create supply baru yang blank
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateSupplyPage(),
+      ),
+    );
+  }
+
+  Future<void> _deleteHeaderAndNavigateBack() async {
+    if (!widget.isEdit) {
+      _navigateToNewSupplyPage();
+      return;
+    }
+
+    final supplyId = int.tryParse(_supplyIdController.text.trim()) ?? 0;
+    if (supplyId == 0) {
+      _navigateToNewSupplyPage();
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await ApiService.deleteSupply(supplyId: supplyId);
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Header deleted: All detail items were removed'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        _navigateToNewSupplyPage();
+      } else {
+        final message = result['message']?.toString() ?? 'Failed to delete header';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        _navigateToNewSupplyPage();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting header: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      _navigateToNewSupplyPage();
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _navigateToNewSupplyPage() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateSupplyPage(),
+      ),
+    );
+  }
+
   void _applyItemSelection(Map<String, dynamic> data) {
     // Apply selection to header hint fields
     var changed = false;
@@ -2079,6 +2342,113 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
   }
 
+  Future<void> _scanQRForDetailItem(int rowIndex) async {
+    // Validate warehouse is selected first
+    final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
+    if (fromId == 0) {
+      _showErrorMessage('Pilih gudang From terlebih dahulu sebelum scan QR');
+      return;
+    }
+
+    try {
+      // TODO: Implement QR scanner integration
+      // For now, show a placeholder dialog
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.qr_code_scanner, color: AppColors.primaryBlue),
+              const SizedBox(width: 8),
+              const Text('QR Scanner'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warehouse_outlined, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Scanning from: ${_supplyFromController.text}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Icon(Icons.qr_code_scanner, size: 64, color: AppColors.primaryBlue),
+              const SizedBox(height: 16),
+              const Text('QR Scanner functionality will be implemented here'),
+              const SizedBox(height: 16),
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Manual QR Code Input (for testing)',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (value) => Navigator.of(context).pop(value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+
+      if (result != null && result.trim().isNotEmpty) {
+        // Process the QR code result
+        await _processQRCodeResult(result.trim(), rowIndex);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorMessage('Error scanning QR code: $e');
+    }
+  }
+
+  Future<void> _processQRCodeResult(String qrData, int rowIndex) async {
+    setState(() => _isLoading = true);
+
+    try {
+      // Parse QR data - adjust this based on your QR code format
+      // Example: if QR contains item code or item ID
+      final Map<String, dynamic> qrResult = {
+        'Item_Code': qrData,
+        // Add other fields based on your QR code format
+      };
+
+      // Apply the QR result to the detail item
+      final currentDetail = _detailItems[rowIndex];
+      final updated = currentDetail.copyWith(
+        itemCode: qrData,
+        // Update other fields as needed based on QR data
+      );
+
+      _updateDetailItem(rowIndex, updated);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('QR Code processed: $qrData'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      _showErrorMessage('Error processing QR code: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _browseItemStockByLotForRow(int rowIndex) async {
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
@@ -2168,9 +2538,34 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Text('Browse Item Stock', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Browse Item Stock',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                                ),
+                                Text(
+                                  'From: ${_supplyFromController.text.isEmpty ? 'Not selected' : _supplyFromController.text}',
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_scanner),
+                              onPressed: () {
+                                Navigator.of(sheetContext).pop();
+                                _scanQRForDetailItem(rowIndex);
+                              },
+                              tooltip: 'Scan QR Code',
+                            ),
+                          ],
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2936,6 +3331,7 @@ class DetailItemRow extends StatefulWidget {
     required this.onChanged,
     this.onDelete,
     this.onBrowse,
+    this.onEdit,
     this.readOnly = false,
   });
 
@@ -2943,6 +3339,7 @@ class DetailItemRow extends StatefulWidget {
   final ValueChanged<SupplyDetailItem> onChanged;
   final VoidCallback? onDelete;
   final VoidCallback? onBrowse;
+  final VoidCallback? onEdit;
   final bool readOnly;
 
   @override
@@ -3119,6 +3516,17 @@ class _DetailItemRowState extends State<DetailItemRow> {
           ),
         ),
         const SizedBox(width: 8),
+        if (widget.onEdit != null)
+          SizedBox(
+            width: 48,
+            child: IconButton(
+              onPressed: widget.readOnly ? null : widget.onEdit,
+              icon: const Icon(Icons.edit_outlined),
+              color: AppColors.primaryBlue,
+              tooltip: 'Edit item',
+            ),
+          ),
+        if (widget.onEdit != null) const SizedBox(width: 8),
         SizedBox(
           width: 48,
           child: IconButton(
