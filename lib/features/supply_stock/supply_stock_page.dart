@@ -158,25 +158,51 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         }
       }
 
+      // Track deletion results
+      int deletedCount = 0;
+      int alreadyDeletedCount = 0;
+      final List<String> errors = [];
+
+      // Delete details - continue even if some fail
       for (final seq in detailSeqIds.toSet()) {
         final deleteDetail = await ApiService.deleteSupply(
           supplyId: supply.supplyId,
           seqId: seq,
         );
-        if (deleteDetail['success'] != true) {
-          final message = deleteDetail['message']?.toString() ?? 'Gagal menghapus detail';
-          throw Exception(message);
+        
+        if (deleteDetail['success'] == true) {
+          if (deleteDetail['alreadyDeleted'] == true) {
+            alreadyDeletedCount++;
+            debugPrint('Detail seq $seq already deleted');
+          } else {
+            deletedCount++;
+            debugPrint('Detail seq $seq deleted successfully');
+          }
+        } else {
+          final message = deleteDetail['message']?.toString() ?? 'Unknown error';
+          errors.add('Detail $seq: $message');
+          debugPrint('Failed to delete detail seq $seq: $message');
         }
       }
 
+      // Delete header
       final deleteHeader = await ApiService.deleteSupply(
         supplyId: supply.supplyId,
         seqId: '0',
       );
 
-      if (deleteHeader['success'] != true) {
-        final message = deleteHeader['message']?.toString() ?? 'Gagal menghapus supply';
-        throw Exception(message);
+      bool headerDeleted = false;
+      if (deleteHeader['success'] == true) {
+        if (deleteHeader['alreadyDeleted'] == true) {
+          headerDeleted = true;
+          debugPrint('Supply header ${supply.supplyId} was already deleted');
+        } else {
+          headerDeleted = true;
+          debugPrint('Supply header ${supply.supplyId} deleted successfully');
+        }
+      } else {
+        final message = deleteHeader['message']?.toString() ?? 'Unknown error';
+        errors.add('Header: $message');
       }
 
       if (progressShown && mounted) {
@@ -184,12 +210,39 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         progressShown = false;
       }
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Supply ${supply.supplyNo} berhasil dihapus'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      // Show appropriate message based on results
+      if (headerDeleted && errors.isEmpty) {
+        String message = 'Supply ${supply.supplyNo} berhasil dihapus';
+        if (alreadyDeletedCount > 0) {
+          message += ' ($alreadyDeletedCount item sudah dihapus sebelumnya)';
+        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else if (headerDeleted && errors.isNotEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Supply dihapus dengan peringatan: ${errors.join(', ')}',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Gagal menghapus supply: ${errors.join(', ')}',
+            ),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
 
       _loadSupplyStocks();
     } catch (e) {
@@ -199,7 +252,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       }
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Gagal menghapus supply: $e'),
+          content: Text('Error menghapus supply: $e'),
           backgroundColor: AppColors.error,
         ),
       );

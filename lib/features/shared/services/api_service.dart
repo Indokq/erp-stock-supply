@@ -704,7 +704,25 @@ class ApiService {
         final responseData = jsonDecode(response.body);
         final message = responseData['msg'] as String?;
         if (message != null && message.contains('ERR@')) {
-          return {'success': false, 'message': message.replaceAll('ERR@', '').trim()};
+          final errorMsg = message.replaceAll('ERR@', '').trim();
+          
+          // Check if it's a "not found" error (item already deleted or doesn't exist)
+          if (errorMsg.toLowerCase().contains('not found') || 
+              errorMsg.toLowerCase().contains('tidak ditemukan')) {
+            return {
+              'success': true,
+              'alreadyDeleted': true,
+              'message': errorMsg,
+              'data': responseData,
+            };
+          }
+          
+          // Other errors are real failures
+          return {
+            'success': false,
+            'message': errorMsg,
+            'data': responseData,
+          };
         }
         return {'success': true, 'data': responseData};
       } else {
