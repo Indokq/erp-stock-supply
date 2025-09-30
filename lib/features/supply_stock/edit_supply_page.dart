@@ -1184,61 +1184,101 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         context: context,
         isScrollControlled: true,
         builder: (sheetContext) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.assignment_outlined),
-                      SizedBox(width: 8),
-                      Text('Select Order Entry', style: TextStyle(fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final row = items[index];
-                      final orderNo = _getStringValue(
-                        row,
-                        const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
-                        partialMatches: const ['orderno', 'noorder', 'order', 'number'],
-                      );
-                      final projectNo = _getStringValue(
-                        row,
-                        const ['Project_No', 'ProjectNo', 'No_Project', 'Project_Number'],
-                        partialMatches: const ['projectno', 'noproject', 'project', 'number'],
-                      );
-                      final description = _getStringValue(
-                        row,
-                        const ['Description', 'Remark', 'Notes'],
-                        partialMatches: const ['description', 'remark', 'notes', 'desc'],
-                      );
-                      final title = orderNo!;
-                      final subtitle = [
-                        if (projectNo != null && projectNo.isNotEmpty) 'Project: $projectNo',
-                        if (description != null && description.isNotEmpty) description,
-                      ].join(' • ');
+          Map<String, dynamic>? selectedItem;
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              return SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.assignment_outlined),
+                          SizedBox(width: 8),
+                          Text('Select Order Entry', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final row = items[index];
+                          final orderNo = _getStringValue(
+                            row,
+                            const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
+                            partialMatches: const ['orderno', 'noorder', 'order', 'number'],
+                          );
+                          final projectNo = _getStringValue(
+                            row,
+                            const ['Project_No', 'ProjectNo', 'No_Project', 'Project_Number'],
+                            partialMatches: const ['projectno', 'noproject', 'project', 'number'],
+                          );
+                          final description = _getStringValue(
+                            row,
+                            const ['Description', 'Remark', 'Notes'],
+                            partialMatches: const ['description', 'remark', 'notes', 'desc'],
+                          );
+                          final title = orderNo!;
+                          final subtitle = [
+                            if (projectNo != null && projectNo.isNotEmpty) 'Project: $projectNo',
+                            if (description != null && description.isNotEmpty) description,
+                          ].join(' • ');
 
-                      return ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.assignment), backgroundColor: Color(0xFFEAF2FF)),
-                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(sheetContext).pop(row),
-                      );
-                    },
-                  ),
+                          final isSelected = selectedItem == row;
+
+                          return ListTile(
+                            leading: const CircleAvatar(child: Icon(Icons.assignment), backgroundColor: Color(0xFFEAF2FF)),
+                            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
+                            trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right),
+                            selected: isSelected,
+                            selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                            onTap: () {
+                              setModalState(() {
+                                selectedItem = row;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: selectedItem == null
+                                  ? null
+                                  : () => Navigator.of(sheetContext).pop(selectedItem),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Confirm Selection'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       );
@@ -1473,15 +1513,41 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        controller: searchCtrl,
-                        onChanged: (v) => setModal(() { applyFilter(v); }),
-                        decoration: const InputDecoration(
-                          hintText: 'Cari berdasarkan Item Code...',
-                          prefixIcon: Icon(Icons.search_rounded),
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: searchCtrl,
+                              onSubmitted: (v) => setModal(() { applyFilter(v); }),
+                              decoration: InputDecoration(
+                                hintText: 'Cari berdasarkan Item Code...',
+                                prefixIcon: const Icon(Icons.search_rounded),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon: searchCtrl.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear),
+                                        onPressed: () {
+                                          searchCtrl.clear();
+                                          setModal(() { applyFilter(''); });
+                                        },
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () => setModal(() { applyFilter(searchCtrl.text); }),
+                            icon: const Icon(Icons.search, size: 18),
+                            label: const Text('Search'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
