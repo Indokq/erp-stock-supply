@@ -1023,13 +1023,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   }
 
   bool _matchesNormalizedKey(String key, Set<String> targets) {
-    if (targets.contains(key)) return true;
-    for (final target in targets) {
-      if (target.length > 2 && key.endsWith(target)) {
-        return true;
-      }
-    }
-    return false;
+    return targets.contains(key);
   }
 
   String? _stringifyValue(dynamic value) {
@@ -1428,12 +1422,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     final lotNumber = _getStringValue(
       data,
       const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-      partialMatches: const ['lot', 'batch'],
     );
     final heatNo = _getStringValue(
       data,
       const ['Heat_No', 'HeatNo', 'Heat_Number'],
-      partialMatches: const ['heat', 'heatno'],
     );
     final size = _getStringValue(
       data,
@@ -1904,7 +1896,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         final lot = _getStringValue(
                           row,
                           const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-                          partialMatches: const ['lot', 'batch'],
                         );
                         final qty = _getStringValue(
                           row,
@@ -1927,7 +1918,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         final heat = _getStringValue(
                           row,
                           const ['Heat_No', 'HeatNo', 'Heat_Number'],
-                          partialMatches: const ['heat', 'heatno', 'heattreatment'],
                         );
                         final size = _getStringValue(
                           row,
@@ -2117,8 +2107,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           for (var idx = 0; idx < stockItems.length && idx < 5; idx++) {
             final si = stockItems[idx];
             final siId = _parseIntValue(_getFirstValue(si, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'stockid', 'id']));
-            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '';
-            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '';
+            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot']) ?? '';
+            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number']) ?? '';
             final siCode = _getStringValue(si, const ['Item_Code', 'ItemCode', 'Code'], partialMatches: const ['itemcode', 'code']) ?? '';
             debugPrint('  [$idx] ID=$siId, Code="$siCode", Lot="$siLot", Heat="$siHeat"');
           }
@@ -2314,7 +2304,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       _getStringValue(
         data,
         const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-        partialMatches: const ['lot', 'batch'],
       ),
     );
     setValue(
@@ -2322,7 +2311,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       _getStringValue(
         data,
         const ['Heat_No', 'HeatNo', 'Heat_Number'],
-        partialMatches: const ['heat', 'heatno', 'heattreatment'],
       ),
     );
     setValue(
@@ -2415,11 +2403,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     );
     final lot = resolveValue(
       const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-      partialMatches: const ['lot', 'batch'],
     );
     final heat = resolveValue(
       const ['Heat_No', 'HeatNo', 'Heat_Number'],
-      partialMatches: const ['heat', 'heatno', 'heattreatment'],
     );
     final unit = resolveValue(
       const ['Unit', 'Unit_Stock', 'UOM', 'OrderUnit'],
@@ -2521,7 +2507,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       final lot = _getStringValue(
         row,
         const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-        partialMatches: const ['lot', 'batch'],
       );
       final numericId = _parseIntValue(
         _getFirstValue(
@@ -2628,7 +2613,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       final lot = _getStringValue(
                         row,
                         const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-                        partialMatches: const ['lot', 'batch'],
                       );
                       final qty = _getStringValue(
                         row,
@@ -2796,7 +2780,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                     final lot = _getStringValue(
                       row,
                       const ['Lot_No','LotNo','Lot_Number','Lot'],
-                      partialMatches: const ['lot','batch'],
                     );
                     final codeLc = (code ?? '').toLowerCase();
                     final nameLc = (name ?? '').toLowerCase();
@@ -2882,10 +2865,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                   partialMatches: const ['itemname','description','colname','namestock','namabarang'],
                                 ) ?? 'Item ${index + 1}';
                             final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode','SKU'], partialMatches: const ['itemcode','kode','code','sku']);
-                            final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot'], partialMatches: const ['lot','batch']);
+                            final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot']);
                             final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
                             final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
-                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number'], partialMatches: const ['heat','heatno','heattreatment']);
+                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number']);
 
                             final details = <String>[];
                             if (code != null) details.add(code);
@@ -3695,7 +3678,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
       border: const OutlineInputBorder(),
       isDense: true,
       filled: true,
-      fillColor: widget.readOnly ? AppColors.readOnlyYellow : AppColors.surfaceCard,
+      fillColor: AppColors.readOnlyYellow,
     );
   }
 
@@ -3708,12 +3691,12 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 2,
           child: TextFormField(
             controller: _itemCodeController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Item Code').copyWith(
               suffixIcon: IconButton(
                 tooltip: 'Browse Item Stock',
                 icon: const Icon(Icons.inventory),
-                onPressed: widget.readOnly ? null : widget.onBrowse,
+                onPressed: widget.onBrowse,
               ),
             ),
             textInputAction: TextInputAction.next,
@@ -3725,7 +3708,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 3,
           child: TextFormField(
             controller: _itemNameController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Item Name'),
             textInputAction: TextInputAction.next,
             onChanged: (_) => _emitChange(),
@@ -3736,7 +3719,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 1,
           child: TextFormField(
             controller: _qtyController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Qty'),
             textAlign: TextAlign.right,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -3749,7 +3732,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 1,
           child: TextFormField(
             controller: _unitController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Unit'),
             textInputAction: TextInputAction.next,
             onChanged: (_) => _emitChange(),
@@ -3760,7 +3743,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 2,
           child: TextFormField(
             controller: _lotNumberController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Lot Number'),
             textInputAction: TextInputAction.next,
             onChanged: (_) => _emitChange(),
@@ -3771,7 +3754,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 2,
           child: TextFormField(
             controller: _heatNumberController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Heat Number'),
             textInputAction: TextInputAction.next,
             onChanged: (_) => _emitChange(),
@@ -3782,7 +3765,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 3,
           child: TextFormField(
             controller: _descriptionController,
-            readOnly: widget.readOnly,
+            readOnly: true,
             decoration: _decoration('Description'),
             maxLines: 2,
             textInputAction: TextInputAction.done,
@@ -3794,7 +3777,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
           SizedBox(
             width: 48,
             child: IconButton(
-              onPressed: widget.readOnly ? null : widget.onEdit,
+              onPressed: widget.onEdit,
               icon: const Icon(Icons.edit_outlined),
               color: AppColors.primaryBlue,
               tooltip: 'Edit item',
@@ -3804,7 +3787,7 @@ class _DetailItemRowState extends State<DetailItemRow> {
         SizedBox(
           width: 48,
           child: IconButton(
-            onPressed: widget.readOnly ? null : widget.onDelete,
+            onPressed: widget.onDelete,
             icon: const Icon(Icons.delete_outline),
             color: AppColors.error,
             tooltip: 'Remove item',
@@ -3860,4 +3843,7 @@ class _ColumnMeta {
     );
   }
 }
+
+
+
 

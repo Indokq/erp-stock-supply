@@ -660,12 +660,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         final lotNumber = _getStringValue(
           r,
           const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-          partialMatches: const ['lot'],
         ) ?? '';
         final heatNumber = _getStringValue(
           r,
           const ['Heat_No', 'HeatNo', 'Heat_Number', 'Heat'],
-          partialMatches: const ['heat'],
         ) ?? '';
         final size = _getStringValue(
           r,
@@ -864,11 +862,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     );
     final lot = resolveValue(
       const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-      partialMatches: const ['lot', 'batch'],
     );
     final heat = resolveValue(
       const ['Heat_No', 'HeatNo', 'Heat_Number'],
-      partialMatches: const ['heat', 'heatno'],
     );
     final unit = resolveValue(
       const ['Unit', 'UOM', 'OrderUnit', 'Unit_Stock'],
@@ -966,7 +962,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       final lot = _getStringValue(
         row,
         const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-        partialMatches: const ['lot', 'batch'],
       );
       final numericId = _extractIntValue(
         row,
@@ -1071,7 +1066,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       final lot = _getStringValue(
                         row,
                         const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-                        partialMatches: const ['lot', 'batch'],
                       );
                       final qty = _getStringValue(
                         row,
@@ -1302,7 +1296,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     final heatNumber = _getStringValue(
       data,
       const ['Heat_Number', 'HeatNo', 'Heat'],
-      partialMatches: const ['heat'],
     );
 
     if (itemCode != null) _itemCodeController.text = itemCode;
@@ -1438,7 +1431,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     final lot = _getStringValue(
                       r,
                       const ['Lot_No','LotNo','Lot_Number','Lot'],
-                      partialMatches: const ['lot','batch'],
+                      
                     );
                     return (code ?? '').toLowerCase().contains(query) ||
                            (name ?? '').toLowerCase().contains(query) ||
@@ -1494,8 +1487,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           final r = filtered[i];
                           final code = _getStringValue(r, const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'], partialMatches: const ['itemcode', 'code', 'sku']) ?? '';
                           final name = _getStringValue(r, const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'], partialMatches: const ['itemname', 'name', 'title', 'desc']) ?? '';
-                          final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot'], partialMatches: const ['lot']) ?? '';
-                          final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat'], partialMatches: const ['heat']) ?? '';
+                          final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot']) ?? '';
+                          final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat']) ?? '';
                           return ListTile(
                             leading: const Icon(Icons.inventory_2_outlined),
                             title: Text(name.isNotEmpty ? name : code),
@@ -1880,8 +1873,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           for (var idx = 0; idx < stockItems.length && idx < 5; idx++) {
             final si = stockItems[idx];
             final siId = _parseIntValue(_getFirstValue(si, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'stockid', 'id']));
-            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '';
-            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '';
+            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot']) ?? '';
+            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number']) ?? '';
             final siCode = _getStringValue(si, const ['Item_Code', 'ItemCode', 'Code'], partialMatches: const ['itemcode', 'code']) ?? '';
             debugPrint('  [$idx] ID=$siId, Code="$siCode", Lot="$siLot", Heat="$siHeat"');
           }
@@ -1896,8 +1889,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
             const ['Item_ID', 'ItemId', 'ID'],
             partialMatches: const ['itemid', 'stockid', 'id'],
           ));
-          final stockLot = (_getStringValue(stockItem, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '').trim();
-          final stockHeat = (_getStringValue(stockItem, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '').trim();
+          final stockLot = (_getStringValue(stockItem, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot']) ?? '').trim();
+          final stockHeat = (_getStringValue(stockItem, const ['Heat_No', 'HeatNo', 'Heat_Number']) ?? '').trim();
 
           final itemIdMatches = stockItemId == itemId;
           final lotMatches = lotNumber.isEmpty || stockLot.toLowerCase() == lotNumber.toLowerCase();
@@ -3076,3 +3069,7 @@ class _ColumnMeta {
     );
   }
 }
+
+
+
+
