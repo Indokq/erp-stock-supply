@@ -141,6 +141,47 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     return int.tryParse(cleaned);
   }
 
+  dynamic _getFirstValue(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    List<String> partialMatches = const [],
+  }) {
+    if (data.isEmpty) return null;
+
+    for (final key in keys) {
+      if (data.containsKey(key)) {
+        return data[key];
+      }
+    }
+
+    for (final partialKey in partialMatches) {
+      for (final key in data.keys) {
+        if (key.toLowerCase().contains(partialKey.toLowerCase())) {
+          return data[key];
+        }
+      }
+    }
+
+    return null;
+  }
+
+  int? _parseIntValue(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+
+    final parsed = int.tryParse(text);
+    if (parsed != null) return parsed;
+
+    final doubleVal = double.tryParse(text);
+    if (doubleVal != null) return doubleVal.toInt();
+
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -303,7 +344,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.max,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
                         children: [
@@ -333,9 +375,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Flexible(
+                      Expanded(
                         child: ListView.separated(
-                          shrinkWrap: true,
                           itemCount: filtered.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 6),
                           itemBuilder: (context, index) {
@@ -472,7 +513,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.max,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
                         children: [
@@ -502,9 +544,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Flexible(
+                      Expanded(
                         child: ListView.separated(
-                          shrinkWrap: true,
                           itemCount: filtered.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 6),
                           itemBuilder: (context, index) {
@@ -618,12 +659,12 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         ) ?? '';
         final lotNumber = _getStringValue(
           r,
-          const ['Lot_Number', 'LotNo', 'Lot'],
+          const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
           partialMatches: const ['lot'],
         ) ?? '';
         final heatNumber = _getStringValue(
           r,
-          const ['Heat_Number', 'HeatNo', 'Heat'],
+          const ['Heat_No', 'HeatNo', 'Heat_Number', 'Heat'],
           partialMatches: const ['heat'],
         ) ?? '';
         final size = _getStringValue(
@@ -1145,7 +1186,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         builder: (sheetContext) {
           return SafeArea(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1158,9 +1200,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                   ),
                 ),
                 const Divider(height: 1),
-                Flexible(
+                Expanded(
                   child: ListView.separated(
-                    shrinkWrap: true,
                     itemCount: items.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
@@ -1409,7 +1450,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
             builder: (context, setModal) {
               return SafeArea(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Padding(
                       padding: const EdgeInsets.all(16),
@@ -1444,9 +1486,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     ),
                     const SizedBox(height: 8),
                     const Divider(height: 1),
-                    Flexible(
+                    Expanded(
                       child: ListView.separated(
-                        shrinkWrap: true,
                         itemCount: filtered.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, i) {
@@ -1776,6 +1817,189 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     );
   }
 
+  Future<void> _validateStockAvailability(List<Map<String, dynamic>> detailsPayload, int fromId) async {
+    if (fromId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Warehouse From tidak valid untuk validasi stock.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      throw Exception('Invalid warehouse');
+    }
+
+    for (int i = 0; i < detailsPayload.length; i++) {
+      final detail = detailsPayload[i];
+      final itemId = detail['itemId'] as int;
+      final requestedQty = detail['qty'] as double;
+      final lotNumber = detail['lotNumber'] as String;
+      final heatNumber = detail['heatNumber'] as String;
+
+      debugPrint('🔍 Checking stock for itemId: $itemId, lot: "$lotNumber", heat: "$heatNumber", requestedQty: $requestedQty');
+
+      try {
+        final dateStr = _supplyDate.toIso8601String().split('T').first;
+        final stockResult = await ApiService.browseItemStockByLot(
+          id: fromId,
+          companyId: 1,
+          dateStart: dateStr,
+          dateEnd: dateStr,
+        );
+
+        if (stockResult['success'] != true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal mengecek stock untuk item ke-${i+1}. Header tidak akan disimpan.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          throw Exception('Stock check failed');
+        }
+
+        final stockData = stockResult['data'];
+        if (stockData is! Map<String, dynamic>) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Data stock tidak tersedia untuk validasi item ke-${i+1}. Header tidak akan disimpan.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          throw Exception('Stock data unavailable');
+        }
+
+        final stockItems = _extractRows(stockData);
+        
+        debugPrint('📋 Total stock items from API: ${stockItems.length}');
+        debugPrint('🔎 Looking for: ItemID=$itemId, Lot="$lotNumber", Heat="$heatNumber"');
+        
+        // Log all available items for debugging
+        if (stockItems.isEmpty) {
+          debugPrint('⚠️ WARNING: No stock items returned from API for warehouse $fromId');
+        } else {
+          debugPrint('📦 Available items in stock:');
+          for (var idx = 0; idx < stockItems.length && idx < 5; idx++) {
+            final si = stockItems[idx];
+            final siId = _parseIntValue(_getFirstValue(si, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'stockid', 'id']));
+            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '';
+            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '';
+            final siCode = _getStringValue(si, const ['Item_Code', 'ItemCode', 'Code'], partialMatches: const ['itemcode', 'code']) ?? '';
+            debugPrint('  [$idx] ID=$siId, Code="$siCode", Lot="$siLot", Heat="$siHeat"');
+          }
+          if (stockItems.length > 5) {
+            debugPrint('  ... and ${stockItems.length - 5} more items');
+          }
+        }
+
+        final matchingStock = stockItems.where((stockItem) {
+          final stockItemId = _parseIntValue(_getFirstValue(
+            stockItem,
+            const ['Item_ID', 'ItemId', 'ID'],
+            partialMatches: const ['itemid', 'stockid', 'id'],
+          ));
+          final stockLot = (_getStringValue(stockItem, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '').trim();
+          final stockHeat = (_getStringValue(stockItem, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '').trim();
+
+          final itemIdMatches = stockItemId == itemId;
+          final lotMatches = lotNumber.isEmpty || stockLot.toLowerCase() == lotNumber.toLowerCase();
+          final heatMatches = heatNumber.isEmpty || stockHeat.toLowerCase() == heatNumber.toLowerCase();
+          
+          debugPrint('  🔍 Item: stockId=$stockItemId vs $itemId, lot="$stockLot" vs "$lotNumber", heat="$stockHeat" vs "$heatNumber" → ${(itemIdMatches && lotMatches && heatMatches) ? "✓ MATCH" : "✗ NO MATCH"}');
+
+          return itemIdMatches && lotMatches && heatMatches;
+        }).toList();
+
+        debugPrint('🎯 Matching stock items found: ${matchingStock.length}');
+
+        if (matchingStock.isEmpty) {
+          final itemCodeForMsg = _getStringValue(
+            stockItems.where((si) {
+              final sid = _parseIntValue(_getFirstValue(si, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'stockid', 'id']));
+              return sid == itemId;
+            }).firstOrNull ?? {},
+            const ['Item_Code', 'ItemCode', 'Code'],
+            partialMatches: const ['itemcode', 'code'],
+          ) ?? 'Item-$itemId';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Item "$itemCodeForMsg" dengan Lot="$lotNumber", Heat="$heatNumber" tidak ditemukan di warehouse ini.\n'
+                'Pastikan Lot dan Heat Number sesuai dengan stock yang tersedia.'
+              ),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+          throw Exception('Item with specified lot/heat not found in stock');
+        }
+
+        // Calculate total available qty for this itemId + lot + heat combo
+        double totalAvailableQty = 0.0;
+        debugPrint('💰 Calculating total stock from ${matchingStock.length} matching item(s):');
+        for (var idx = 0; idx < matchingStock.length; idx++) {
+          final stockItem = matchingStock[idx];
+          final qtyString = _getStringValue(
+            stockItem,
+            const ['Qty', 'Quantity', 'Qty_Available', 'Balance', 'Stock'],
+            partialMatches: const ['qty', 'quantity', 'balance', 'stock'],
+          );
+          final qty = double.tryParse(qtyString?.replaceAll(',', '.') ?? '0') ?? 0.0;
+          debugPrint('   [$idx] Raw qty string: "$qtyString" → Parsed: $qty');
+          totalAvailableQty += qty;
+        }
+
+        debugPrint('📦 Total available stock: $totalAvailableQty, Requested: $requestedQty');
+        debugPrint('🔢 Comparison: $totalAvailableQty < $requestedQty = ${totalAvailableQty < requestedQty}');
+
+        if (totalAvailableQty < requestedQty) {
+          final itemCode = _getStringValue(
+            matchingStock.first,
+            const ['Item_Code', 'ItemCode', 'Code'],
+            partialMatches: const ['itemcode', 'code'],
+          ) ?? 'Item-$itemId';
+
+          final errorMsg = 'Stock tidak cukup untuk "$itemCode":\n'
+              'Lot: "$lotNumber", Heat: "$heatNumber"\n'
+              'Available: ${totalAvailableQty.toStringAsFixed(2)}\n'
+              'Requested: ${requestedQty.toStringAsFixed(2)}';
+
+          debugPrint('🚨 INSUFFICIENT STOCK DETECTED:');
+          debugPrint('   Item: $itemCode');
+          debugPrint('   Available: $totalAvailableQty');
+          debugPrint('   Requested: $requestedQty');
+          debugPrint('   Deficit: ${requestedQty - totalAvailableQty}');
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+          
+          debugPrint('🛑 Throwing exception: Insufficient stock');
+          throw Exception('Insufficient stock for item $itemCode (available: $totalAvailableQty, requested: $requestedQty)');
+        }
+
+      } catch (e) {
+        if (e.toString().contains('Insufficient stock') ||
+            e.toString().contains('Stock check failed') ||
+            e.toString().contains('Item not found') ||
+            e.toString().contains('Invalid warehouse')) {
+          rethrow;
+        }
+        debugPrint('❌ Error checking stock: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saat mengecek stock item ke-${i+1}: $e. Header tidak akan disimpan.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        throw Exception('Stock validation error: $e');
+      }
+    }
+  }
+
   Future<void> _saveAll() async {
     if (widget.readOnly) {
       Navigator.pop(context);
@@ -1838,6 +2062,54 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           ? _tryParseInt(_receivedById)
           : _tryParseInt(_receivedByController.text.trim());
 
+      // Prepare and validate details before saving
+      final detailsToValidate = _detailItems
+          .where((item) => item.itemCode.trim().isNotEmpty && item.qty > 0)
+          .toList();
+
+      if (detailsToValidate.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Tidak ada detail item yang valid. Header tidak akan disimpan.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final detailsPayload = <Map<String, dynamic>>[];
+      for (final item in detailsToValidate) {
+        final itemId = _resolveItemId(item);
+        if (itemId == null || itemId == 0) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Item "${item.itemCode}" tidak memiliki ID yang valid. Header tidak akan disimpan.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return;
+        }
+
+        detailsPayload.add({
+          'itemId': itemId,
+          'qty': item.qty,
+          'lotNumber': item.lotNumber.trim(),
+          'heatNumber': item.heatNumber.trim(),
+        });
+      }
+      // VALIDASI STOCK AVAILABILITY - DISABLED (allow negative stock)
+      // debugPrint('🔵 START STOCK VALIDATION - Total items to validate: ${detailsPayload.length}');
+      // try {
+      //   await _validateStockAvailability(detailsPayload, fromId);
+      //   debugPrint("✅ Stock validation passed - Proceeding to save header");
+      // } catch (e) {
+      //   debugPrint("❌ Stock validation FAILED: $e");
+      //   debugPrint("🛑 STOPPING SAVE OPERATION - Header will NOT be saved");
+      //   setState(() => _isSaving = false);
+      //   return;
+      // }
+      debugPrint("⚠️ STOCK VALIDATION SKIPPED - Allowing save without stock check");
+
       final headerResult = await ApiService.saveSupplyHeader(
         supplyCls: 1,
         supplyId: supplyId,
@@ -1891,14 +2163,23 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         }
         final unitId = _resolveUnitId(item);
 
+        final lotNumberToSend = item.lotNumber.trim();
+        final heatNumberToSend = item.heatNumber.trim();
+        
+        debugPrint('💾 Saving detail ${i + 1}/${detailsToSave.length}:');
+        debugPrint('   ItemCode: "${item.itemCode}"');
+        debugPrint('   Qty: ${item.qty}');
+        debugPrint('   LotNumber: "$lotNumberToSend" (length: ${lotNumberToSend.length})');
+        debugPrint('   HeatNumber: "$heatNumberToSend" (length: ${heatNumberToSend.length})');
+
         final detailResult = await ApiService.saveSupplyDetail(
           supplyId: supplyId,
           seqId: seqId,
           itemId: itemId,
           qty: item.qty,
           unitId: unitId,
-          lotNumber: item.lotNumber.trim(),
-          heatNumber: item.heatNumber.trim(),
+          lotNumber: lotNumberToSend,
+          heatNumber: heatNumberToSend,
           size: item.size.trim(),
           description: item.description.trim(),
           userEntry: userEntry,

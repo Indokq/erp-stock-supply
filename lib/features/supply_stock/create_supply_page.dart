@@ -575,17 +575,18 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         }
       }
 
-      debugPrint('✅ ALL PAYLOAD ITEMS VALIDATED - PROCEEDING WITH STOCK CHECK');
+      debugPrint('✅ ALL PAYLOAD ITEMS VALIDATED - SKIPPING STOCK CHECK');
 
-      // Validasi stock availability sebelum save
-      try {
-        await _validateStockAvailability(detailsPayload);
-      } catch (e) {
-        debugPrint('❌ Stock validation failed: $e');
-        return; // Stop execution, error message already shown
-      }
+      // VALIDASI STOCK AVAILABILITY DI-DISABLE
+      // Biar bisa save tanpa cek lot/heat
+      // try {
+      //   await _validateStockAvailability(detailsPayload);
+      // } catch (e) {
+      //   debugPrint('❌ Stock validation failed: $e');
+      //   return;
+      // }
 
-      debugPrint('✅ STOCK VALIDATION PASSED - PROCEEDING WITH API CALL');
+      debugPrint('⚠️ STOCK VALIDATION SKIPPED - PROCEEDING WITH API CALL');
 
       final result = await ApiService.createSupplyWithDetails(
         supplyCls: 1,
@@ -2104,8 +2105,29 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         }
 
         final stockItems = _extractRows(stockData);
+        
+        debugPrint('📋 Total stock items from API: ${stockItems.length}');
+        debugPrint('🔎 Looking for: ItemID=$itemId, Lot="$lotNumber", Heat="$heatNumber"');
+        
+        // Log all available items for debugging
+        if (stockItems.isEmpty) {
+          debugPrint('⚠️ WARNING: No stock items returned from API for warehouse $fromId');
+        } else {
+          debugPrint('📦 Available items in stock:');
+          for (var idx = 0; idx < stockItems.length && idx < 5; idx++) {
+            final si = stockItems[idx];
+            final siId = _parseIntValue(_getFirstValue(si, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'stockid', 'id']));
+            final siLot = _getStringValue(si, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'], partialMatches: const ['lot', 'batch']) ?? '';
+            final siHeat = _getStringValue(si, const ['Heat_No', 'HeatNo', 'Heat_Number'], partialMatches: const ['heat', 'heatno']) ?? '';
+            final siCode = _getStringValue(si, const ['Item_Code', 'ItemCode', 'Code'], partialMatches: const ['itemcode', 'code']) ?? '';
+            debugPrint('  [$idx] ID=$siId, Code="$siCode", Lot="$siLot", Heat="$siHeat"');
+          }
+          if (stockItems.length > 5) {
+            debugPrint('  ... and ${stockItems.length - 5} more items');
+          }
+        }
 
-        // Cari item yang sesuai berdasarkan itemId, lot, dan heat
+        // Cari item yang sesuai berdasarkan itemId ONLY (lot/heat diabaikan)
         final matchingStock = stockItems.where((stockItem) {
           final stockItemId = _parseIntValue(_getFirstValue(
             stockItem,
@@ -2113,25 +2135,23 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             partialMatches: const ['itemid', 'stockid', 'id'],
           ));
 
-          final stockLot = _getStringValue(
-            stockItem,
-            const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-            partialMatches: const ['lot', 'batch'],
-          ) ?? '';
+          final itemIdMatches = stockItemId == itemId;
+          
+          debugPrint('  🔍 Item: stockId=$stockItemId vs $itemId → ${itemIdMatches ? "✓ MATCH" : "✗ NO MATCH"}');
 
-          final stockHeat = _getStringValue(
-            stockItem,
-            const ['Heat_No', 'HeatNo', 'Heat_Number'],
-            partialMatches: const ['heat', 'heatno'],
-          ) ?? '';
-
-          return stockItemId == itemId &&
-                 stockLot.trim() == lotNumber.trim() &&
-                 stockHeat.trim() == heatNumber.trim();
+          // SIMPLE MATCH: Hanya cek itemId, lot dan heat DIABAIKAN
+          return itemIdMatches;
         }).toList();
 
+        debugPrint('🎯 Matching stock items found: ${matchingStock.length}');
+
         if (matchingStock.isEmpty) {
-          _showErrorMessage('Item ke-${i+1} tidak ditemukan di warehouse atau lot/heat tidak sesuai. Header tidak akan disimpan.');
+          _showErrorMessage(
+            'Item ke-${i+1} tidak ditemukan di warehouse atau lot/heat tidak sesuai.\n'
+            'Dicari: ItemID=$itemId, Lot="$lotNumber", Heat="$heatNumber"\n'
+            'Pastikan item dengan lot/heat tersebut ada di warehouse yang dipilih.\n'
+            'Header tidak akan disimpan.'
+          );
           throw Exception('Item not found in stock');
         }
 

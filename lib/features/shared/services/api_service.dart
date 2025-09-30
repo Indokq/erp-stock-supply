@@ -604,23 +604,31 @@ class ApiService {
     String _n(int? v) => v == null ? 'NULL' : v.toString();
 
     try {
+      print('🔍 saveSupplyDetail - RAW INPUT VALUES:');
+      print('   lotNumber: "$lotNumber" (length: ${lotNumber.length}, isEmpty: ${lotNumber.isEmpty})');
+      print('   heatNumber: "$heatNumber" (length: ${heatNumber.length}, isEmpty: ${heatNumber.isEmpty})');
+      print('   After _q(lotNumber): ${_q(lotNumber)}');
+      print('   After _q(heatNumber): ${_q(heatNumber)}');
+      
+      final apidata = "EXEC spInv_StockSupply_SaveDetail "
+          "@Supply_ID = ${supplyId}, "
+          "@Seq_ID = ${_q(seqId)}, "
+          "@Item_ID = ${itemId}, "
+          "@Qty = ${qty}, "
+          "@Unit_ID = ${_n(unitId)}, "
+          "@Lot_Number = ${_q(lotNumber)}, "
+          "@Heat_Number = ${_q(heatNumber)}, "
+          "@Size = ${_q(size)}, "
+          "@Description = ${_q(description)}, "
+          "@User_Entry = ${_q(userEntry)}";
+      
       final body = {
         'apikey': 'none',
-        'apidata':
-            "EXEC spInv_StockSupply_SaveDetail "
-            "@Supply_ID = ${supplyId}, "
-            "@Seq_ID = ${_q(seqId)}, "
-            "@Item_ID = ${itemId}, "
-            "@Qty = ${qty}, "
-            "@Unit_ID = ${_n(unitId)}, "
-            "@Lot_Number = ${_q(lotNumber)}, "
-            "@Heat_Number = ${_q(heatNumber)}, "
-            "@Size = ${_q(size)}, "
-            "@Description = ${_q(description)}, "
-            "@User_Entry = ${_q(userEntry)}"
+        'apidata': apidata,
       };
 
       print('🔗 API URL: $baseUrl');
+      print('📤 saveSupplyDetail SQL: $apidata');
       print('📤 Request Body: ${jsonEncode(body)}');
 
       final response = await http.post(
@@ -639,17 +647,21 @@ class ApiService {
         final responseData = jsonDecode(response.body);
         final message = responseData['msg'] as String?;
         if (message != null && message.contains('ERR@')) {
+          print('❌ saveSupplyDetail ERROR: ${message.replaceAll('ERR@', '').trim()}');
           return {'success': false, 'message': message.replaceAll('ERR@', '').trim()};
         }
-        return {'success': true, 'data': responseData};
+        print('✅ saveSupplyDetail SUCCESS');
+        return {'success': true, 'data': responseData, 'message': message ?? 'Detail saved'};
       } else {
+        final errorMsg = 'Failed to save supply detail with status: ${response.statusCode}';
+        print('❌ saveSupplyDetail ERROR: $errorMsg');
         return {
           'success': false,
-          'message': 'Failed to save supply detail with status: ${response.statusCode}',
+          'message': errorMsg,
         };
       }
     } catch (e) {
-      print('❌ API Error: $e');
+      print('❌ API Error saveSupplyDetail: $e');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
@@ -1058,17 +1070,34 @@ class ApiService {
 
     final detailSupplyId = newId;
 
+    if (kDebugMode) {
+      debugPrint('🔵 START SAVING DETAILS - Total details to save: ${details.length}');
+      debugPrint('🔵 Using Supply_ID: $detailSupplyId for all details');
+    }
+
     final detailResults = <Map<String, dynamic>>[];
     bool allDetailsOk = true;
     for (var i = 0; i < details.length; i++) {
       final d = details[i];
       final itemId = _toInt(d['itemId']) ?? 0;
       final qty = (d['qty'] as num?)?.toDouble() ?? 0.0;
+      
+      if (kDebugMode) {
+        debugPrint('');
+        debugPrint('📝 Processing detail ${i + 1}/${details.length}:');
+        debugPrint('   Raw itemId: ${d['itemId']} → Parsed: $itemId');
+        debugPrint('   Raw qty: ${d['qty']} → Parsed: $qty');
+      }
+      
       if (itemId <= 0 || qty <= 0) {
+        final errorMsg = 'Invalid itemId=$itemId or qty=$qty';
+        if (kDebugMode) {
+          debugPrint('   ❌ SKIPPED: $errorMsg');
+        }
         detailResults.add({
           'index': i,
           'success': false,
-          'message': 'Invalid itemId/qty',
+          'message': errorMsg,
         });
         allDetailsOk = false;
         continue;
@@ -1084,18 +1113,14 @@ class ApiService {
           : '0';
 
       if (kDebugMode) {
-        final payloadPreview = {
-          'supplyId': detailSupplyId,
-          'seqId': seqId,
-          'itemId': itemId,
-          'qty': qty,
-          'unitId': unitId,
-          'lotNumber': lotNumber,
-          'heatNumber': heatNumber,
-          'size': size,
-          'description': description,
-        };
-        debugPrint('createSupplyWithDetails → detail ${i + 1} payload: ${jsonEncode(payloadPreview)}');
+        debugPrint('   ✅ Valid detail - Calling saveSupplyDetail with:');
+        debugPrint('      supplyId: $detailSupplyId');
+        debugPrint('      seqId: $seqId');
+        debugPrint('      itemId: $itemId');
+        debugPrint('      qty: $qty');
+        debugPrint('      unitId: $unitId');
+        debugPrint('      lotNumber: $lotNumber');
+        debugPrint('      heatNumber: $heatNumber');
       }
 
       final res = await saveSupplyDetail(
@@ -1111,18 +1136,34 @@ class ApiService {
         userEntry: userEntry,
       );
 
-      if (res['success'] != true) {
+      final success = res['success'] == true;
+      if (!success) {
         allDetailsOk = false;
+        if (kDebugMode) {
+          debugPrint('   ❌ FAILED: ${res['message']}');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('   ✅ SUCCESS');
+        }
       }
-      if (kDebugMode) {
-        debugPrint('createSupplyWithDetails ← detail ${i + 1} result: ${jsonEncode(res)}');
-      }
+      
       detailResults.add({
         'index': i,
-        'success': res['success'] == true,
+        'success': success,
         'message': res['message'],
         'data': res['data'],
       });
+    }
+    
+    if (kDebugMode) {
+      debugPrint('');
+      debugPrint('🔵 FINISHED SAVING DETAILS');
+      debugPrint('   Total processed: ${detailResults.length}');
+      debugPrint('   Successful: ${detailResults.where((r) => r['success'] == true).length}');
+      debugPrint('   Failed: ${detailResults.where((r) => r['success'] != true).length}');
+      debugPrint('   All details OK: $allDetailsOk');
+      debugPrint('');
     }
 
     return {
