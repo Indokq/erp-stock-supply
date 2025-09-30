@@ -174,6 +174,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           if (deleteDetail['alreadyDeleted'] == true) {
             alreadyDeletedCount++;
             debugPrint('Detail seq $seq already deleted');
+          } else if (deleteDetail['warning'] == true) {
+            deletedCount++;
+            debugPrint('Detail seq $seq deleted with warning: ${deleteDetail['message']}');
           } else {
             deletedCount++;
             debugPrint('Detail seq $seq deleted successfully');
@@ -196,6 +199,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         if (deleteHeader['alreadyDeleted'] == true) {
           headerDeleted = true;
           debugPrint('Supply header ${supply.supplyId} was already deleted');
+        } else if (deleteHeader['warning'] == true) {
+          headerDeleted = true;
+          debugPrint('Supply header ${supply.supplyId} deleted with warning: ${deleteHeader['message']}');
         } else {
           headerDeleted = true;
           debugPrint('Supply header ${supply.supplyId} deleted successfully');

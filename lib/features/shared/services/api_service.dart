@@ -706,12 +706,17 @@ class ApiService {
         if (message != null && message.contains('ERR@')) {
           final errorMsg = message.replaceAll('ERR@', '').trim();
           
-          // Check if it's a "not found" error (item already deleted or doesn't exist)
+          // Check if it's a warning that shouldn't block success
+          // (item already deleted, doesn't exist, or period range mismatch)
           if (errorMsg.toLowerCase().contains('not found') || 
-              errorMsg.toLowerCase().contains('tidak ditemukan')) {
+              errorMsg.toLowerCase().contains('tidak ditemukan') ||
+              errorMsg.toLowerCase().contains('not match with stock period') ||
+              errorMsg.toLowerCase().contains('period range')) {
             return {
               'success': true,
-              'alreadyDeleted': true,
+              'warning': true,
+              'alreadyDeleted': errorMsg.toLowerCase().contains('not found') || 
+                                errorMsg.toLowerCase().contains('tidak ditemukan'),
               'message': errorMsg,
               'data': responseData,
             };
