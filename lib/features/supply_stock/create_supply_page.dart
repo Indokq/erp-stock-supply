@@ -157,6 +157,30 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     });
   }
 
+  int? _findDuplicateItem(SupplyDetailItem item, {int? excludeIndex}) {
+    for (int i = 0; i < _detailItems.length; i++) {
+      if (excludeIndex != null && i == excludeIndex) continue;
+      
+      final existing = _detailItems[i];
+      if (_areItemsIdentical(existing, item)) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  bool _areItemsIdentical(SupplyDetailItem item1, SupplyDetailItem item2) {
+    // Jangan consider sebagai duplicate kalau itemCode kosong (item masih baru/kosong)
+    final code1 = item1.itemCode.trim();
+    final code2 = item2.itemCode.trim();
+    if (code1.isEmpty || code2.isEmpty) return false;
+    
+    return code1.toLowerCase() == code2.toLowerCase() &&
+           item1.lotNumber.trim().toLowerCase() == item2.lotNumber.trim().toLowerCase() &&
+           item1.heatNumber.trim().toLowerCase() == item2.heatNumber.trim().toLowerCase() &&
+           item1.size.trim().toLowerCase() == item2.size.trim().toLowerCase();
+  }
+
   void _removeDetailItem(int index) {
     if (index < 0 || index >= _detailItems.length) return;
     setState(() {
@@ -2745,14 +2769,37 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         primaryData: source,
         fallbackRaw: selectionRaw,
       );
-      _updateDetailItem(rowIndex, updated);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      
+      // Check for duplicates and merge if found
+      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: rowIndex);
+      if (duplicateIndex != null) {
+        // Merge with existing item
+        final existingItem = _detailItems[duplicateIndex];
+        final mergedItem = existingItem.copyWith(
+          qty: existingItem.qty + updated.qty,
+        );
+        setState(() {
+          _detailItems[duplicateIndex] = mergedItem;
+          _detailItems.removeAt(rowIndex);
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item "${updated.itemCode}" digabung. Qty total: ${mergedItem.qty}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        // No duplicate, update current row
+        _updateDetailItem(rowIndex, updated);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
     } catch (e) {
       _showErrorMessage('Gagal memproses barcode: $e');
     } finally {
@@ -2972,7 +3019,29 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         primaryData: source,
         fallbackRaw: selectionRaw,
       );
-      _updateDetailItem(rowIndex, updated);
+      
+      // Check for duplicates and merge if found
+      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: rowIndex);
+      if (duplicateIndex != null) {
+        // Merge with existing item
+        final existingItem = _detailItems[duplicateIndex];
+        final mergedItem = existingItem.copyWith(
+          qty: existingItem.qty + updated.qty,
+        );
+        setState(() {
+          _detailItems[duplicateIndex] = mergedItem;
+          _detailItems.removeAt(rowIndex);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item digabung dengan yang sudah ada. Qty total: ${mergedItem.qty}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        // No duplicate, update current row
+        _updateDetailItem(rowIndex, updated);
+      }
     } catch (e) {
       if (!mounted) return;
       _showErrorMessage('Gagal membuka data item stock: $e');
@@ -3785,8 +3854,10 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 1,
           child: TextFormField(
             controller: _qtyController,
-            readOnly: true,
-            decoration: _decoration('Qty'),
+            readOnly: widget.readOnly,
+            decoration: _decoration('Qty').copyWith(
+              fillColor: widget.readOnly ? AppColors.readOnlyYellow : Colors.white,
+            ),
             textAlign: TextAlign.right,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.next,
@@ -3831,8 +3902,10 @@ class _DetailItemRowState extends State<DetailItemRow> {
           flex: 3,
           child: TextFormField(
             controller: _descriptionController,
-            readOnly: true,
-            decoration: _decoration('Description'),
+            readOnly: widget.readOnly,
+            decoration: _decoration('Description').copyWith(
+              fillColor: widget.readOnly ? AppColors.readOnlyYellow : Colors.white,
+            ),
             maxLines: 2,
             textInputAction: TextInputAction.done,
             onChanged: (_) => _emitChange(),

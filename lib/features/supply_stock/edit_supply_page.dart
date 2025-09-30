@@ -760,6 +760,41 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     return null;
   }
 
+  double? _getDoubleValue(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    List<String> partialMatches = const [],
+  }) {
+    for (final key in keys) {
+      final v = data[key];
+      if (v != null) {
+        if (v is num) return v.toDouble();
+        final str = v.toString().trim();
+        if (str.isNotEmpty) {
+          final parsed = double.tryParse(str);
+          if (parsed != null) return parsed;
+        }
+      }
+    }
+    if (partialMatches.isNotEmpty) {
+      for (final entry in data.entries) {
+        final k = entry.key.toLowerCase();
+        if (partialMatches.any((p) => k.contains(p.toLowerCase()))) {
+          final v = entry.value;
+          if (v != null) {
+            if (v is num) return v.toDouble();
+            final str = v.toString().trim();
+            if (str.isNotEmpty) {
+              final parsed = double.tryParse(str);
+              if (parsed != null) return parsed;
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   int? _extractIntValue(
     Map<String, dynamic>? data,
     List<String> keys, {
@@ -1555,20 +1590,38 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           final name = _getStringValue(r, const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'], partialMatches: const ['itemname', 'name', 'title', 'desc']) ?? '';
                           final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot']) ?? '';
                           final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat']) ?? '';
+                          final qty = _getDoubleValue(r, const ['Qty', 'Quantity', 'Stock', 'Balance', 'Saldo']) ?? 0.0;
+                          
                           return ListTile(
                             leading: const Icon(Icons.inventory_2_outlined),
                             title: Text(name.isNotEmpty ? name : code),
-                            subtitle: [
-                              if (code.isNotEmpty) 'Code: $code',
-                              if (lot.isNotEmpty) 'Lot: $lot',
-                              if (heat.isNotEmpty) 'Heat: $heat',
-                            ].join(' • ').isEmpty
-                                ? null
-                                : Text([
-                                    if (code.isNotEmpty) 'Code: $code',
-                                    if (lot.isNotEmpty) 'Lot: $lot',
-                                    if (heat.isNotEmpty) 'Heat: $heat',
-                                  ].join(' • ')),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if ([
+                                  if (code.isNotEmpty) 'Code: $code',
+                                  if (lot.isNotEmpty) 'Lot: $lot',
+                                  if (heat.isNotEmpty) 'Heat: $heat',
+                                ].isNotEmpty)
+                                  Text(
+                                    [
+                                      if (code.isNotEmpty) 'Code: $code',
+                                      if (lot.isNotEmpty) 'Lot: $lot',
+                                      if (heat.isNotEmpty) 'Heat: $heat',
+                                    ].join(' • '),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Stock: ${qty.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: qty > 0 ? AppColors.success : Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.of(sheetContext).pop(r),
                           );
@@ -1589,14 +1642,60 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         current: _detailItems[index],
         primaryData: selectionRaw,
       );
-      setState(() {
-        _detailItems[index] = updated;
-      });
+      
+      // Check for duplicates and merge if found
+      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: index);
+      if (duplicateIndex != null) {
+        // Merge with existing item
+        final existingItem = _detailItems[duplicateIndex];
+        final mergedItem = existingItem.copyWith(
+          qty: existingItem.qty + updated.qty,
+        );
+        setState(() {
+          _detailItems[duplicateIndex] = mergedItem;
+          _detailItems.removeAt(index);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item digabung dengan yang sudah ada. Qty total: ${mergedItem.qty}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        // No duplicate, update current row
+        setState(() {
+          _detailItems[index] = updated;
+        });
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error browse item: $e'), backgroundColor: Colors.redAccent),
       );
     }
+  }
+
+  int? _findDuplicateItem(SupplyDetailItem item, {int? excludeIndex}) {
+    for (int i = 0; i < _detailItems.length; i++) {
+      if (excludeIndex != null && i == excludeIndex) continue;
+      
+      final existing = _detailItems[i];
+      if (_areItemsIdentical(existing, item)) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  bool _areItemsIdentical(SupplyDetailItem item1, SupplyDetailItem item2) {
+    // Jangan consider sebagai duplicate kalau itemCode kosong (item masih baru/kosong)
+    final code1 = item1.itemCode.trim();
+    final code2 = item2.itemCode.trim();
+    if (code1.isEmpty || code2.isEmpty) return false;
+    
+    return code1.toLowerCase() == code2.toLowerCase() &&
+           item1.lotNumber.trim().toLowerCase() == item2.lotNumber.trim().toLowerCase() &&
+           item1.heatNumber.trim().toLowerCase() == item2.heatNumber.trim().toLowerCase() &&
+           item1.size.trim().toLowerCase() == item2.size.trim().toLowerCase();
   }
 
   Future<void> _scanQRForDetailItem(int index) async {
@@ -1670,15 +1769,37 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         primaryData: selectionRaw,
       );
       if (!mounted) return;
-      setState(() {
-        _detailItems[index] = updated;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      
+      // Check for duplicates and merge if found
+      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: index);
+      if (duplicateIndex != null) {
+        // Merge with existing item
+        final existingItem = _detailItems[duplicateIndex];
+        final mergedItem = existingItem.copyWith(
+          qty: existingItem.qty + updated.qty,
+        );
+        setState(() {
+          _detailItems[duplicateIndex] = mergedItem;
+          _detailItems.removeAt(index);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item "${updated.itemCode}" digabung. Qty total: ${mergedItem.qty}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        // No duplicate, update current row
+        setState(() {
+          _detailItems[index] = updated;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
