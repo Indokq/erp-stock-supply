@@ -704,7 +704,30 @@ class ApiService {
         final responseData = jsonDecode(response.body);
         final message = responseData['msg'] as String?;
         if (message != null && message.contains('ERR@')) {
-          return {'success': false, 'message': message.replaceAll('ERR@', '').trim()};
+          final errorMsg = message.replaceAll('ERR@', '').trim();
+          
+          // Check if it's a warning that shouldn't block success
+          // (item already deleted, doesn't exist, or period range mismatch)
+          if (errorMsg.toLowerCase().contains('not found') || 
+              errorMsg.toLowerCase().contains('tidak ditemukan') ||
+              errorMsg.toLowerCase().contains('not match with stock period') ||
+              errorMsg.toLowerCase().contains('period range')) {
+            return {
+              'success': true,
+              'warning': true,
+              'alreadyDeleted': errorMsg.toLowerCase().contains('not found') || 
+                                errorMsg.toLowerCase().contains('tidak ditemukan'),
+              'message': errorMsg,
+              'data': responseData,
+            };
+          }
+          
+          // Other errors are real failures
+          return {
+            'success': false,
+            'message': errorMsg,
+            'data': responseData,
+          };
         }
         return {'success': true, 'data': responseData};
       } else {
