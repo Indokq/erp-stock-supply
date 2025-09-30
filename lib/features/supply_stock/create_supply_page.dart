@@ -1221,31 +1221,34 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Pilih Order Entry',
+          Map<String, dynamic>? selectedItem;
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Pilih Order Entry',
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                         ),
                         IconButton(
@@ -1301,6 +1304,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         if (projectNo != null) details.add('Project: $projectNo');
                         if (description != null) details.add(description);
 
+                        final isSelected = selectedItem == selection;
+
                         return ListTile(
                           leading: const CircleAvatar(
                             backgroundColor: Color(0xFFE8F5E8),
@@ -1314,15 +1319,50 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             details.join(' • '),
                             style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                          selected: isSelected,
+                          selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                          onTap: () {
+                            setModalState(() {
+                              selectedItem = selection;
+                            });
+                          },
                         );
                       },
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: selectedItem == null
+                                ? null
+                                : () => Navigator.of(sheetContext).pop(selectedItem),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryBlue,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Confirm Selection'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
+              );
+            },
           );
         },
       );
@@ -2839,15 +2879,41 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: searchCtrl,
-                          onChanged: (v) => setModalState(() { applyFilter(v); }),
-                          decoration: const InputDecoration(
-                            hintText: 'Cari berdasarkan Item Code...',
-                            prefixIcon: Icon(Icons.search_rounded),
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: searchCtrl,
+                                onSubmitted: (v) => setModalState(() { applyFilter(v); }),
+                                decoration: InputDecoration(
+                                  hintText: 'Cari berdasarkan Item Code...',
+                                  prefixIcon: const Icon(Icons.search_rounded),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                  suffixIcon: searchCtrl.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          onPressed: () {
+                                            searchCtrl.clear();
+                                            setModalState(() { applyFilter(''); });
+                                          },
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => setModalState(() { applyFilter(searchCtrl.text); }),
+                              icon: const Icon(Icons.search, size: 18),
+                              label: const Text('Search'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 8),
