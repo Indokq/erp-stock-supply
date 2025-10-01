@@ -71,6 +71,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   // Detail state
   final TextEditingController _searchController = TextEditingController();
   List<SupplyDetailItem> _detailItems = [];
+  final List<Map<String, dynamic>> _deletedItems = [];
+  
+  // Track original items count to know how many to delete
+  int _originalItemsCount = 0;
 
   // Column meta (optional)
   final Map<String, _ColumnMeta> _columnMeta = {};
@@ -187,6 +191,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     super.initState();
     _hydrateFromHeader(widget.header);
     _detailItems = List.of(widget.initialItems);
+    _deletedItems.clear(); // Clear any stale deleted items tracking
     if (widget.columnMetaRows != null) {
       _columnMeta
         ..clear()
@@ -680,6 +685,19 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           const ['Seq_ID', 'SeqId', 'Sequence', 'Seq'],
           partialMatches: const ['seq'],
         );
+        
+        // Resolve Seq_ID: use value from DB (including '0'), never generate from index
+        String resolvedSeqId = '0';
+        if (seqCandidate != null && seqCandidate.trim().isNotEmpty) {
+          resolvedSeqId = seqCandidate.trim();
+        } else {
+          // Check if Seq_ID exists as numeric 0 in raw data
+          final seqRaw = _getFirstValue(r, const ['Seq_ID', 'SeqId', 'Sequence', 'Seq'], partialMatches: const ['seq']);
+          if (seqRaw != null) {
+            resolvedSeqId = seqRaw.toString().trim();
+          }
+        }
+        
         final itemIdValue = _extractIntValue(
           r,
           const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'Item_Index', 'ItemIDX', 'ItemIdx', 'ID'],
@@ -701,9 +719,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           description: description,
           size: size,
           itemId: itemIdValue,
-          seqId: (seqCandidate != null && seqCandidate.trim().isNotEmpty)
-              ? seqCandidate.trim()
-              : (index + 1).toString(),
+          seqId: resolvedSeqId,
           unitId: unitIdValue,
           raw: Map<String, dynamic>.from(r),
         );
@@ -711,12 +727,33 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
       final items = <SupplyDetailItem>[];
       for (var i = 0; i < rows.length; i++) {
-        items.add(_mapRow(rows[i], i));
+        final row = rows[i];
+        final mappedItem = _mapRow(row, i);
+        
+        // CRITICAL: Extract backend-generated "ID" from database response
+        // This ID is used for UPDATE operations (not Seq_ID which is always 0)
+        final backendId = _getStringValue(
+          row,
+          const ['ID', 'id', 'Id', 'Seq_ID', 'SeqId'],
+          partialMatches: const ['id', 'seq'],
+        );
+        
+        final finalSeqId = (backendId != null && backendId.trim().isNotEmpty)
+            ? backendId.trim()
+            : (i + 1).toString();  // Fallback to index
+        
+        final fixedItem = mappedItem.copyWith(seqId: finalSeqId);
+        
+        items.add(fixedItem);
+        debugPrint('✅ Loaded item ${i + 1}: ${fixedItem.itemCode} - Backend ID: ${finalSeqId}');
       }
+      
       if (!mounted) return;
       setState(() {
         _detailItems = items;
+        _originalItemsCount = items.length; // Track original count from DB
       });
+      debugPrint('📊 Loaded ${items.length} items from database, all with unique Seq_IDs');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -820,8 +857,13 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   String _resolveSeqId(SupplyDetailItem item, int fallbackIndex) {
     final hasSupplyContext = _rawHasSupplyContext(item.raw);
     final seq = item.seqId.trim();
+    
     if (hasSupplyContext) {
-      if (seq.isNotEmpty && seq != '0') return seq;
+      // Item from database - use actual Seq_ID including '0'
+      if (seq.isNotEmpty) {
+        return seq; // Return as-is, including '0' from database
+      }
+      // Fallback: try to get from raw data
       final fromRaw = _getStringValue(
         item.raw!,
         const ['Seq_ID', 'SeqId', 'Sequence', 'Seq', 'Seq_ID_Detail'],
@@ -1153,6 +1195,40 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           if (match != null) {
             final parsed = _tryParseInt(match.group(1));
             if (parsed != null) return parsed;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _extractSeqIdFromResponse(dynamic payload) {
+    if (payload is! Map<String, dynamic>) return null;
+    final tbl0 = payload['tbl0'];
+    if (tbl0 is List && tbl0.isNotEmpty) {
+      final first = tbl0.first;
+      if (first is Map) {
+        final map = first.cast<String, dynamic>();
+        final candidates = [
+          map['Seq_ID'],
+          map['SeqId'],
+          map['Sequence'],
+          map['Seq']
+        ];
+        for (final candidate in candidates) {
+          if (candidate != null) {
+            final str = candidate.toString().trim();
+            if (str.isNotEmpty && str != '0') return str;
+          }
+        }
+        final resultMsg = map['Result']?.toString();
+        if (resultMsg != null) {
+          final match = RegExp(r'(?:Seq_ID|SeqId)\s*[:=]\s*(\d+)').firstMatch(resultMsg);
+          if (match != null) {
+            final seqStr = match.group(1);
+            if (seqStr != null && seqStr.trim().isNotEmpty) {
+              return seqStr.trim();
+            }
           }
         }
       }
@@ -1643,30 +1719,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         primaryData: selectionRaw,
       );
       
-      // Check for duplicates and merge if found
-      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: index);
-      if (duplicateIndex != null) {
-        // Merge with existing item
-        final existingItem = _detailItems[duplicateIndex];
-        final mergedItem = existingItem.copyWith(
-          qty: existingItem.qty + updated.qty,
-        );
-        setState(() {
-          _detailItems[duplicateIndex] = mergedItem;
-          _detailItems.removeAt(index);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Item digabung dengan yang sudah ada. Qty total: ${mergedItem.qty}'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      } else {
-        // No duplicate, update current row
-        setState(() {
-          _detailItems[index] = updated;
-        });
-      }
+      // Update current row without checking for duplicates
+      setState(() {
+        _detailItems[index] = updated;
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error browse item: $e'), backgroundColor: Colors.redAccent),
@@ -1770,36 +1826,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       );
       if (!mounted) return;
       
-      // Check for duplicates and merge if found
-      final duplicateIndex = _findDuplicateItem(updated, excludeIndex: index);
-      if (duplicateIndex != null) {
-        // Merge with existing item
-        final existingItem = _detailItems[duplicateIndex];
-        final mergedItem = existingItem.copyWith(
-          qty: existingItem.qty + updated.qty,
-        );
-        setState(() {
-          _detailItems[duplicateIndex] = mergedItem;
-          _detailItems.removeAt(index);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Item "${updated.itemCode}" digabung. Qty total: ${mergedItem.qty}'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      } else {
-        // No duplicate, update current row
-        setState(() {
-          _detailItems[index] = updated;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+      // Update current row without checking for duplicates
+      setState(() {
+        _detailItems[index] = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Item "${updated.itemCode}" berhasil diisi dari barcode.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1823,6 +1859,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   void _addDetailItem() {
     if (widget.readOnly) return;
     setState(() {
+      // New items get Seq_ID='0' to signal INSERT mode to backend
+      // Backend will auto-generate unique ID upon save
       _detailItems.add(SupplyDetailItem(
         itemCode: '',
         itemName: '',
@@ -1832,8 +1870,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         heatNumber: '',
         description: '',
         size: '',
-        seqId: '0',
+        seqId: '0',  // '0' = INSERT new record
       ));
+      debugPrint('➕ Added new detail item with Seq_ID=0 (INSERT mode)');
     });
   }
 
@@ -1874,75 +1913,65 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     final supplyId = _tryParseInt(supplyIdText) ?? widget.header.supplyId;
     final seqId = item.seqId.trim();
 
-    // Unsaved row (no seq or seq == 0) can be removed locally
-    if (seqId.isEmpty || seqId == '0' || supplyId <= 0) {
-      setState(() => _detailItems.removeAt(index));
-
-      // Check if all detail items are deleted
-      if (_detailItems.isEmpty) {
-        // Navigate to blank create supply page
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _deleteHeaderAndNavigateToBlank();
-        });
-        return; // Exit early, don't show success message
-      }
-
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Detail dihapus'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _deletingDetailIndexes.add(index));
-
-    final currentUser = AuthService.currentUser;
-    final userEntry = (currentUser != null && currentUser.trim().isNotEmpty)
-        ? currentUser.trim()
-        : 'admin';
-
-    try {
-      final result = await ApiService.deleteSupply(
-        supplyId: supplyId,
-        seqId: seqId,
-      );
-
-      if (result['success'] != true) {
-        final message = result['message']?.toString() ?? 'Gagal menghapus detail';
-        throw Exception(message);
-      }
-
-      setState(() => _detailItems.removeAt(index));
-
-      // Check if all detail items are deleted
-      if (_detailItems.isEmpty) {
-        // Navigate to blank create supply page
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _deleteHeaderAndNavigateToBlank();
-        });
-        return; // Exit early, don't show success message
-      }
-
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Detail berhasil dihapus'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Gagal menghapus detail: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _deletingDetailIndexes.remove(index));
+    // CRITICAL: Execute DELETE API immediately for existing items (not deferred)
+    if (seqId.isNotEmpty && seqId != '0' && supplyId > 0) {
+      // Item from database - delete it NOW
+      debugPrint('🗑️ Deleting item immediately: ${item.itemCode} (Supply_ID=$supplyId, Seq_ID=$seqId)');
+      
+      // Show loading indicator
+      setState(() => _deletingDetailIndexes.add(index));
+      
+      try {
+        final deleteResult = await ApiService.deleteSupply(
+          supplyId: supplyId,
+          seqId: seqId,
+        );
+        
+        if (deleteResult['success'] == true) {
+          debugPrint('   ✅ Item deleted from database');
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Item "${item.itemCode}" berhasil dihapus'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else {
+          debugPrint('   ⚠️ Delete warning: ${deleteResult['message']}');
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Peringatan: ${deleteResult['message']}'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('   ❌ Delete error: $e');
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error menghapus item: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _deletingDetailIndexes.remove(index));
+        }
       }
     }
+    
+    // Remove from UI
+    setState(() => _detailItems.removeAt(index));
+
+    // Check if all detail items are deleted
+    if (_detailItems.isEmpty) {
+      // All items deleted - trigger header deletion and navigate back
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _deleteHeaderAndNavigateToBlank();
+      });
+      return; // Exit early
+    }
+    
+    // Note: Item deletion already showed snackbar above, no need for another one
   }
 
   Future<void> _deleteHeaderAndNavigateToBlank() async {
@@ -1955,18 +1984,24 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     }
 
     try {
-      // Delete the header since all details are removed
-      final result = await ApiService.deleteSupply(supplyId: supplyId);
+      // Delete the header with Seq_ID='0' to delete all remaining (header + any orphan details)
+      debugPrint('🗑️ Deleting header since all detail items were removed (Supply_ID=$supplyId)');
+      final result = await ApiService.deleteSupply(
+        supplyId: supplyId,
+        seqId: '0',  // Delete all
+      );
 
       if (result['success'] == true) {
+        debugPrint('✅ Header deleted successfully');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Header deleted: All detail items were removed'),
+          const SnackBar(
+            content: Text('Supply dihapus karena semua detail item telah dihapus'),
             backgroundColor: AppColors.success,
           ),
         );
       } else {
-        final message = result['message']?.toString() ?? 'Failed to delete header';
+        final message = result['message']?.toString() ?? 'Gagal menghapus header';
+        debugPrint('⚠️ Header delete warning: $message');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
@@ -1975,16 +2010,19 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         );
       }
     } catch (e) {
+      debugPrint('❌ Error deleting header: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error deleting header: $e'),
+          content: Text('Error menghapus header: $e'),
           backgroundColor: AppColors.error,
         ),
       );
     }
 
-    // Always navigate to blank page regardless of delete result
-    _navigateToBlankCreatePage();
+    // Navigate back to list page
+    if (mounted) {
+      Navigator.pop(context, true);  // Return true to indicate changes
+    }
   }
 
   void _navigateToBlankCreatePage() {
@@ -2181,6 +2219,14 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   }
 
   Future<void> _saveAll() async {
+    debugPrint('');
+    debugPrint('═══════════════════════════════════════════════');
+    debugPrint('🚀 START _saveAll');
+    debugPrint('   Original items count: $_originalItemsCount');
+    debugPrint('   Current items in memory: ${_detailItems.length}');
+    debugPrint('═══════════════════════════════════════════════');
+    debugPrint('');
+    
     if (widget.readOnly) {
       Navigator.pop(context);
       return;
@@ -2326,16 +2372,89 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         _supplyIdController.text = newId.toString();
       }
 
+      // NOTE: Item deletions are now executed immediately when user clicks delete button
+      // No need to process _deletedItems during save
+      
+      debugPrint('');
+      debugPrint('───────────────────────────────────────────────');
+      debugPrint('💾 START SAVING/UPDATING DETAILS');
+      debugPrint('───────────────────────────────────────────────');
+      debugPrint('   Strategy: UPDATE existing items using backend IDs, INSERT new items with Seq_ID=0');
+      debugPrint('');
+
       final detailsToSave = _detailItems
           .where((item) => item.itemCode.trim().isNotEmpty && item.qty > 0)
           .toList();
 
       final List<String> detailErrors = [];
       var detailSaved = 0;
+      
+      debugPrint('📝 Details to save: ${detailsToSave.length}');
+      
+      // CRITICAL: If no valid details to save, delete the entire supply (header + all details)
+      if (detailsToSave.isEmpty) {
+        debugPrint('⚠️ WARNING: No valid details to save!');
+        debugPrint('🗑️ Auto-deleting entire supply (header + all details) since no items remain...');
+        
+        try {
+          // Delete entire supply with Seq_ID='0' (deletes all details + header)
+          final deleteAllResult = await ApiService.deleteSupply(
+            supplyId: supplyId,
+            seqId: '0',
+          );
+          
+          if (deleteAllResult['success'] == true) {
+            debugPrint('✅ Supply deleted successfully');
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Supply dihapus karena tidak ada detail item'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          } else {
+            debugPrint('⚠️ Delete failed: ${deleteAllResult['message']}');
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('Gagal menghapus supply: ${deleteAllResult['message']}'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          
+          // Return to previous page
+          if (mounted) {
+            Navigator.pop(context, true);  // Return true to indicate changes
+          }
+          return;
+        } catch (e) {
+          debugPrint('❌ Error deleting supply: $e');
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Error menghapus supply: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          return;
+        }
+      }
 
       for (var i = 0; i < detailsToSave.length; i++) {
         final item = detailsToSave[i];
-        final seqId = _resolveSeqId(item, i);
+        
+        // CRITICAL FIX: Use backend-generated ID from database for UPDATE
+        // If item has valid Seq_ID (from database), use it for UPDATE
+        // If Seq_ID is '0' or empty, backend will INSERT new record
+        final seqId = (item.seqId.trim().isNotEmpty && item.seqId != '0') 
+            ? item.seqId 
+            : '0';
+        
+        final isUpdate = seqId != '0';
+        
+        debugPrint('');
+        debugPrint('   Processing item ${i + 1}/${detailsToSave.length}:');
+        debugPrint('   ItemCode: ${item.itemCode}');
+        debugPrint('   Backend ID from memory: ${item.seqId}');
+        debugPrint('   Seq_ID to backend: $seqId (${isUpdate ? "UPDATE existing" : "INSERT new"})');
         final itemId = _resolveItemId(item);
         if (itemId == null || itemId == 0) {
           detailErrors.add('Detail ${i + 1}: Item ID tidak ditemukan');
@@ -2346,8 +2465,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         final lotNumberToSend = item.lotNumber.trim();
         final heatNumberToSend = item.heatNumber.trim();
         
+        // Note: After delete-all, all items are treated as INSERT with unique sequential Seq_IDs
         debugPrint('💾 Saving detail ${i + 1}/${detailsToSave.length}:');
         debugPrint('   ItemCode: "${item.itemCode}"');
+        debugPrint('   ItemId: $itemId');
+        debugPrint('   SeqId: "$seqId"');
         debugPrint('   Qty: ${item.qty}');
         debugPrint('   LotNumber: "$lotNumberToSend" (length: ${lotNumberToSend.length})');
         debugPrint('   HeatNumber: "$heatNumberToSend" (length: ${heatNumberToSend.length})');
@@ -2365,10 +2487,20 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           userEntry: userEntry,
         );
 
+        debugPrint('📡 Backend response for item ${i + 1}:');
+        debugPrint('   Success: ${detailResult['success']}');
+        debugPrint('   Message: ${detailResult['message']}');
+        debugPrint('   Data: ${detailResult['data']}');
+
         if (detailResult['success'] != true) {
-          detailErrors.add('Detail ${i + 1}: ' + (detailResult['message']?.toString() ?? 'gagal disimpan'));
+          final errorMsg = 'Detail ${i + 1}: ' + (detailResult['message']?.toString() ?? 'gagal disimpan');
+          detailErrors.add(errorMsg);
+          debugPrint('❌ FAILED to save item ${i + 1}: $errorMsg');
         } else {
           detailSaved++;
+          debugPrint('✅ SUCCESS saved item ${i + 1}');
+          // NOTE: We don't extract Seq_ID from backend response because backend auto-generates IDs
+          // Frontend will reload all items from database to get backend-generated IDs
         }
       }
 
@@ -2382,15 +2514,45 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         return;
       }
 
+      // Wait for backend to commit all inserts before reloading
+      debugPrint('⏳ Waiting 3 seconds for backend to commit all inserts...');
+      await Future.delayed(const Duration(seconds: 3));
+      
+      // Reload details from database to get backend-generated IDs and verify saved data
+      debugPrint('🔄 Reloading details from database to verify save...');
+      debugPrint('   Supply_ID: $supplyId');
+      await _loadSupplyDetails();
+      debugPrint('✅ Details reloaded from database');
+      debugPrint('   Total items in database: ${_detailItems.length}');
+      debugPrint('   Expected items count: ${detailSaved}');
+      
+      if (_detailItems.length != detailSaved) {
+        debugPrint('   ⚠️ WARNING: Item count mismatch! Saved=$detailSaved but loaded=${_detailItems.length}');
+      }
+      
+      // Log all reloaded items with their quantities to verify correctness
+      debugPrint('📋 Reloaded items:');
+      for (var i = 0; i < _detailItems.length; i++) {
+        final item = _detailItems[i];
+        debugPrint('   [$i] ${item.itemCode} - Qty: ${item.qty} - Seq_ID: ${item.seqId} (frontend tracking)');
+      }
+
+      if (!mounted) return;
+      
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            detailSaved > 0 ? 'Header dan ${detailSaved} detail tersimpan' : 'Header tersimpan',
+            detailSaved > 0 ? 'Berhasil menyimpan header dan ${detailSaved} detail' : 'Header tersimpan',
           ),
           backgroundColor: AppColors.success,
         ),
       );
-      Navigator.pop(context, true);
+      
+      // Wait a bit for user to see the success message, then return to previous page
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(

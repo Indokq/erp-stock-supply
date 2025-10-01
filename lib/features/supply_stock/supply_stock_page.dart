@@ -158,6 +158,22 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         }
       }
 
+      if (detailSeqIds.isNotEmpty) {
+        if (progressShown && mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+          progressShown = false;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Supply ${supply.supplyNo} masih memiliki ${detailSeqIds.length} detail item. Hapus detail terlebih dahulu sebelum menghapus header.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       // Track deletion results
       int deletedCount = 0;
       int alreadyDeletedCount = 0;
@@ -169,23 +185,23 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           supplyId: supply.supplyId,
           seqId: seq,
         );
-        
-        if (deleteDetail['success'] == true) {
-          if (deleteDetail['alreadyDeleted'] == true) {
-            alreadyDeletedCount++;
-            debugPrint('Detail seq $seq already deleted');
-          } else if (deleteDetail['warning'] == true) {
-            deletedCount++;
-            debugPrint('Detail seq $seq deleted with warning: ${deleteDetail['message']}');
-          } else {
-            deletedCount++;
-            debugPrint('Detail seq $seq deleted successfully');
-          }
-        } else {
-          final message = deleteDetail['message']?.toString() ?? 'Unknown error';
-          errors.add('Detail $seq: $message');
-          debugPrint('Failed to delete detail seq $seq: $message');
+        final success = deleteDetail['success'] == true;
+        final alreadyDeleted = deleteDetail['alreadyDeleted'] == true;
+        if (success) {
+          deletedCount++;
+          debugPrint('Detail seq $seq deleted successfully');
+          continue;
         }
+
+        if (alreadyDeleted) {
+          alreadyDeletedCount++;
+          debugPrint('Detail seq $seq already deleted');
+          continue;
+        }
+
+        final message = deleteDetail['message']?.toString() ?? 'Unknown error';
+        errors.add('Detail $seq: $message');
+        debugPrint('Failed to delete detail seq $seq: $message');
       }
 
       // Delete header
@@ -195,17 +211,15 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       );
 
       bool headerDeleted = false;
-      if (deleteHeader['success'] == true) {
-        if (deleteHeader['alreadyDeleted'] == true) {
-          headerDeleted = true;
-          debugPrint('Supply header ${supply.supplyId} was already deleted');
-        } else if (deleteHeader['warning'] == true) {
-          headerDeleted = true;
-          debugPrint('Supply header ${supply.supplyId} deleted with warning: ${deleteHeader['message']}');
-        } else {
-          headerDeleted = true;
-          debugPrint('Supply header ${supply.supplyId} deleted successfully');
-        }
+      final headerSuccess = deleteHeader['success'] == true;
+      final headerAlreadyDeleted = deleteHeader['alreadyDeleted'] == true;
+
+      if (headerSuccess) {
+        headerDeleted = true;
+        debugPrint('Supply header ${supply.supplyId} deleted successfully');
+      } else if (headerAlreadyDeleted) {
+        headerDeleted = true;
+        debugPrint('Supply header ${supply.supplyId} was already deleted');
       } else {
         final message = deleteHeader['message']?.toString() ?? 'Unknown error';
         errors.add('Header: $message');
