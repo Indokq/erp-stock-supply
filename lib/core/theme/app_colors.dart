@@ -45,4 +45,7 @@ class AppColors {
   static const shadowLight = Color(0x0F000000);      // Light shadow
   static const shadowMedium = Color(0x1F000000);     // Medium shadow
   static const shadowDark = Color(0x25000000);       // Dark shadow
+
+  // Read-only field indicator
+  static const readOnlyYellow = Color(0xFFFFF9C4);   // Soft yellow for view-only inputs
 }

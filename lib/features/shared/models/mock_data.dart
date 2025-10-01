@@ -4,46 +4,132 @@ import '../../../core/theme/app_colors.dart';
 import 'movement_type.dart';
 import 'stock_models.dart';
 
+/// Mock data generator for large dataset testing
+class MockDataGenerator {
+  static final List<String> _productNames = [
+    'HDPE Pipe', 'Steel Fastener', 'Sealant Cartridge', 'Industrial Gloves',
+    'Copper Wire', 'PVC Fitting', 'Safety Helmet', 'Welding Rod',
+    'Drill Bit Set', 'Measuring Tape', 'Cable Tie', 'Junction Box',
+    'Motor Oil', 'Bearing Unit', 'Gasket Ring', 'Filter Element',
+    'Pressure Gauge', 'Control Valve', 'Hose Assembly', 'Pump Impeller',
+    'Electrical Switch', 'Transformer', 'Circuit Breaker', 'Conduit Pipe',
+    'Insulation Material', 'Adhesive Tape', 'Cleaning Solvent', 'Lubricant Spray',
+    'Safety Goggles', 'Work Boots', 'Coveralls', 'Hard Hat',
+    'Fire Extinguisher', 'First Aid Kit', 'Warning Sign', 'Traffic Cone',
+    'Tool Box', 'Wrench Set', 'Screwdriver Kit', 'Pliers Set',
+  ];
+
+  static final List<String> _categories = [
+    'Pipes', 'Hardware', 'Chemicals', 'Safety', 'Electrical',
+    'Tools', 'Maintenance', 'PPE', 'Automotive', 'Construction'
+  ];
+
+  static final List<String> _warehouses = [
+    'Central Depot', 'North Hub', 'Assembly Hub', 'South Branch',
+    'East Facility', 'West Storage', 'Downtown Center', 'Industrial Park'
+  ];
+
+  static final List<String> _suppliers = [
+    'Blue River Plastics', 'PolySupply Co.', 'Axis Metals', 'Bolt & Nut Co.',
+    'Bonding Solutions Ltd.', 'ShieldPro Gear', 'Northline PPE', 'TechFlow Industries',
+    'Precision Parts Inc.', 'Global Components', 'Prime Materials', 'Elite Supplies',
+    'Advanced Systems', 'Quality First', 'Reliable Resources', 'Premier Products'
+  ];
+
+  /// Generates a list of mock stock items for big data testing
+  static List<StockItem> generateBigDataSet({int count = 10000}) {
+    final items = <StockItem>[];
+    final random = DateTime.now().millisecondsSinceEpoch;
+
+    for (int i = 0; i < count; i++) {
+      final productIndex = (i * 7 + random) % _productNames.length;
+      final categoryIndex = (i * 11 + random) % _categories.length;
+      final warehouseIndex = (i * 13 + random) % _warehouses.length;
+
+      final baseQuantity = 50 + (i * 17 + random) % 500;
+      final reserved = (i * 3 + random) % 50;
+      final available = baseQuantity - reserved;
+      final reorderPoint = (baseQuantity * 0.3).round() + (i * 5 + random) % 50;
+
+      items.add(StockItem(
+        name: '${_productNames[productIndex]} ${_generateSize(i)}',
+        sku: _generateSKU(productIndex, i),
+        category: _categories[categoryIndex],
+        warehouse: _warehouses[warehouseIndex],
+        quantity: baseQuantity,
+        available: available,
+        reserved: reserved,
+        reorderPoint: reorderPoint,
+        leadTimeDays: 3 + (i * 7 + random) % 15,
+        expiringLots: (i * 19 + random) % 4,
+        averageCost: (5.0 + (i * 23 + random) % 200) / 10.0,
+        suppliers: _generateSuppliers(i),
+        movements: _generateMovements(i),
+      ));
+    }
+
+    return items;
+  }
+
+  static String _generateSize(int index) {
+    final sizes = ['XS', 'S', 'M', 'L', 'XL', '1"', '2"', '3"', '4"', '6"', '8mm', '12mm', '16mm', '20mm', '25mm'];
+    return sizes[(index * 31) % sizes.length];
+  }
+
+  static String _generateSKU(int productIndex, int itemIndex) {
+    final prefix = _productNames[productIndex].split(' ').map((word) => word.substring(0, 2).toUpperCase()).join('');
+    return '$prefix-${(itemIndex + 1000).toString().padLeft(4, '0')}';
+  }
+
+  static List<String> _generateSuppliers(int index) {
+    final count = 1 + (index * 7) % 3; // 1-3 suppliers
+    final suppliers = <String>[];
+    for (int i = 0; i < count; i++) {
+      suppliers.add(_suppliers[(index * 11 + i * 13) % _suppliers.length]);
+    }
+    return suppliers.toSet().toList(); // Remove duplicates
+  }
+
+  static List<StockMovement> _generateMovements(int index) {
+    final count = (index * 5) % 4; // 0-3 movements
+    final movements = <StockMovement>[];
+    final types = MovementType.values;
+
+    for (int i = 0; i < count; i++) {
+      movements.add(StockMovement(
+        date: DateTime.now().subtract(Duration(days: 1 + (index * 7 + i * 3) % 30)),
+        type: types[(index * 13 + i * 7) % types.length],
+        reference: _generateReference(index, i),
+        quantity: 10 + (index * 17 + i * 11) % 100,
+      ));
+    }
+
+    return movements;
+  }
+
+  static String _generateReference(int index, int movementIndex) {
+    final prefixes = ['SO', 'PO', 'WO', 'TR', 'ADJ', 'RET'];
+    final prefix = prefixes[(index * 7 + movementIndex * 11) % prefixes.length];
+    final number = (index * 23 + movementIndex * 31 + 1000) % 9999;
+    return '$prefix-${number.toString().padLeft(4, '0')}';
+  }
+}
+
 final List<QuickAction> quickActions = const [
   QuickAction(
-    label: 'Add Stock',
-    icon: Icons.add_box_rounded,
+    label: 'STOCK SUPPLY',
+    icon: Icons.inventory_2_rounded,
     color: AppColors.primaryBlue,
   ),
   QuickAction(
-    label: 'Transfer',
+    label: 'STOCK ADJUSTMENT',
     icon: Icons.sync_alt_rounded,
-    color: Colors.deepPurple,
+    color: AppColors.primaryBlue,
   ),
   QuickAction(
-    label: 'Stock Alerts',
-    icon: Icons.notifications_active_rounded,
-    color: Colors.orangeAccent,
-  ),
-  QuickAction(
-    label: 'Audit Stock',
-    icon: Icons.fact_check_rounded,
-    color: Colors.green,
-  ),
-  QuickAction(
-    label: 'Receipts',
-    icon: Icons.receipt_long_rounded,
-    color: Colors.blueGrey,
-  ),
-  QuickAction(
-    label: 'Purchase Orders',
-    icon: Icons.assignment_rounded,
-    color: Colors.indigo,
-  ),
-  QuickAction(
-    label: 'Suppliers',
-    icon: Icons.store_mall_directory_rounded,
-    color: Colors.teal,
-  ),
-  QuickAction(
-    label: 'Analytics',
-    icon: Icons.analytics_rounded,
-    color: Colors.pinkAccent,
+    label: 'STOCK LIST',
+    icon: Icons.list_alt_rounded,
+    color: AppColors.primaryBlue,
   ),
 ];
 
@@ -167,6 +253,9 @@ final List<StockItem> mockStockItems = [
     ],
   ),
 ];
+
+// Generate big dataset for testing
+final List<StockItem> bigDataStockItems = MockDataGenerator.generateBigDataSet(count: 10000);
 
 final List<WarehouseCapacity> warehouseCapacities = [
   const WarehouseCapacity(name: 'Central Depot', capacityUsed: 0.68),

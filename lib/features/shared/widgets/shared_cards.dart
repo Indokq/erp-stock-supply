@@ -137,11 +137,18 @@ class StatusChip extends StatelessWidget {
 }
 
 class QuickActionTile extends StatelessWidget {
-  const QuickActionTile({super.key, required this.label, required this.icon, required this.color});
+  const QuickActionTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
 
   final String label;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +156,7 @@ class QuickActionTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {},
+        onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
