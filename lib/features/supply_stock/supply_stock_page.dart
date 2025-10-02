@@ -29,10 +29,38 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
   DateTime _endDate = DateTime.now();
   bool _showDateFilter = false;
 
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     _loadSupplyStocks();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+    });
+  }
+
+  List<SupplyStock> get _filteredSupplyStocks {
+    if (_searchQuery.isEmpty) {
+      return _supplyStocks;
+    }
+    return _supplyStocks.where((supply) {
+      return supply.supplyId.toString().toLowerCase().contains(_searchQuery) ||
+          supply.supplyNo.toLowerCase().contains(_searchQuery);
+    }).toList();
   }
 
   Future<void> _loadSupplyStocks() async {
@@ -429,6 +457,38 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       body: SafeArea(
         child: Column(
           children: [
+            Container(
+              color: AppColors.surfaceCard,
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: isCompact ? 12 : 16,
+              ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by Supply ID or Supply No...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
             if (_showDateFilter)
               Container(
                 color: AppColors.surfaceCard,
@@ -487,7 +547,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                                 const SectionHeader(title: 'Stock Supply List'),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Total: ${_supplyStocks.length} supply records',
+                                  _searchQuery.isNotEmpty
+                                      ? 'Found: ${_filteredSupplyStocks.length} of ${_supplyStocks.length} records'
+                                      : 'Total: ${_supplyStocks.length} supply records',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
@@ -578,6 +640,41 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       );
     }
 
+    final displayList = _filteredSupplyStocks;
+
+    if (displayList.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: 64,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Results Found',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No supply records match "$_searchQuery"',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
@@ -585,9 +682,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         horizontalPadding,
         isCompact ? 24 : 32,
       ),
-      itemCount: _supplyStocks.length,
+      itemCount: displayList.length,
       itemBuilder: (context, index) {
-        final supply = _supplyStocks[index];
+        final supply = displayList[index];
         return Padding(
           padding: EdgeInsets.only(bottom: isCompact ? 10 : 12),
           child: SupplyStockCard(
