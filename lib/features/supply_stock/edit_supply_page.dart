@@ -5,6 +5,7 @@ import 'create_supply_page.dart' as create_supply;
 import 'models/supply_detail_item.dart';
 import '../shared/widgets/shared_cards.dart';
 import '../shared/services/api_service.dart';
+import '../shared/utils/formatters.dart';
 import '../shared/services/auth_service.dart';
 import '../shared/services/barcode_scanner_service.dart';
 
@@ -328,6 +329,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         builder: (context) {
           final TextEditingController searchCtrl = TextEditingController();
           List<Map<String, dynamic>> filtered = List.of(rows);
+          String? selectedWarehouseId;
+          Map<String, dynamic>? selectedItem;
+          
           return StatefulBuilder(
             builder: (context, setModalState) {
               void applyFilter(String q) {
@@ -389,18 +393,54 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                             final name = (m['Org_Name'] ?? '').toString();
                             final code = (m['Org_Code'] ?? '').toString();
                             final id = (m['ID'] ?? '').toString();
+                            final isSelected = selectedWarehouseId == id;
+                            
                             return ListTile(
                               dense: true,
                               leading: const Icon(Icons.location_on_outlined),
                               title: Text(name),
                               subtitle: code.isNotEmpty ? Text(code) : null,
-                              onTap: () => Navigator.pop<Map<String, dynamic>>(context, {
-                                'id': id,
-                                'name': name,
-                              }),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                              onTap: () {
+                                setModalState(() {
+                                  selectedWarehouseId = id;
+                                  selectedItem = {
+                                    'id': id,
+                                    'name': name,
+                                  };
+                                });
+                              },
                             );
                           },
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: selectedItem == null
+                                  ? null
+                                  : () => Navigator.pop<Map<String, dynamic>>(context, selectedItem),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Confirm Selection'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -504,6 +544,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         builder: (context) {
           final TextEditingController searchCtrl = TextEditingController();
           List<Map<String, dynamic>> filtered = List.of(rows);
+          String? selectedEmployeeId;
+          Map<String, String>? selectedItem;
+          
           void applyFilter(String q) {
             final qq = q.toLowerCase();
             filtered = rows.where((m) {
@@ -512,6 +555,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
               return name.contains(qq) || code.contains(qq);
             }).toList();
           }
+          
           return StatefulBuilder(
             builder: (context, setModal) {
               return SafeArea(
@@ -558,18 +602,57 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                             final name = _pickName(m);
                             final code = _pickCode(m);
                             final id = _pickId(m);
+                            final itemId = id.isNotEmpty ? id : (code.isNotEmpty ? code : index.toString());
+                            final isSelected = selectedEmployeeId == itemId;
+                            
                             return ListTile(
                               dense: true,
                               leading: const Icon(Icons.person_outline_rounded),
                               title: Text(name),
                               subtitle: code.isNotEmpty ? Text(code) : null,
-                              onTap: () => Navigator.pop<Map<String, String>>(context, {
-                                'id': id,
-                                'name': name,
-                              }),
+                              trailing: isSelected 
+                                ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) 
+                                : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                              onTap: () {
+                                setModal(() {
+                                  selectedEmployeeId = itemId;
+                                  selectedItem = {
+                                    'id': id,
+                                    'name': name,
+                                  };
+                                });
+                              },
                             );
                           },
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: selectedItem == null
+                                  ? null
+                                  : () => Navigator.pop<Map<String, String>>(context, selectedItem),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Confirm Selection'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -943,10 +1026,20 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     final heat = resolveValue(
       const ['Heat_No', 'HeatNo', 'Heat_Number'],
     );
-    final unit = resolveValue(
-      const ['Unit', 'UOM', 'OrderUnit', 'Unit_Stock'],
-      partialMatches: const ['unit', 'uom', 'stockunit'],
+    String? unit = resolveValue(
+      const ['OrderUnit', 'Unit', 'UOM', 'Unit_Stock'],
+      partialMatches: const ['orderunit', 'unit', 'uom', 'stockunit'],
     );
+    if (unit != null) {
+      final ut = unit.trim();
+      final isNumeric = RegExp(r'^-?\d+(\.0+)?$').hasMatch(ut);
+      if (isNumeric) {
+        unit = resolveValue(
+              const ['OrderUnit', 'UOM', 'Unit', 'Unit_Name', 'UOM_Name'],
+              partialMatches: const ['orderunit', 'uom', 'unit', 'unitname', 'uomname'],
+            ) ?? ut;
+      }
+    }
     final size = resolveValue(
       const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
       partialMatches: const ['size', 'dimension'],
@@ -1643,7 +1736,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             onPressed: () => setModal(() { applyFilter(searchCtrl.text); }),
-                            icon: const Icon(Icons.search, size: 18),
                             label: const Text('Search'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryBlue,
@@ -1662,29 +1754,39 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, i) {
                           final r = filtered[i];
-                          final code = _getStringValue(r, const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'], partialMatches: const ['itemcode', 'code', 'sku']) ?? '';
-                          final name = _getStringValue(r, const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'], partialMatches: const ['itemname', 'name', 'title', 'desc']) ?? '';
-                          final lot = _getStringValue(r, const ['Lot_Number', 'LotNo', 'Lot']) ?? '';
+                          final code = _getStringValue(
+                                r,
+                                const ['Item_Code', 'ItemCode', 'Code', 'SKU', 'colCode', 'ColCode'],
+                                partialMatches: const ['itemcode', 'code', 'sku'],
+                              ) ?? '';
+                          final name = _getStringValue(
+                                r,
+                                const ['Item_Name', 'ItemName', 'Name', 'Title', 'Description'],
+                                partialMatches: const ['itemname', 'name', 'title', 'desc'],
+                              ) ?? '';
+                          final lot = _getStringValue(
+                                r,
+                                const ['Lot_No', 'Lot_Number', 'LotNo', 'Lot'],
+                              )?.trim() ?? '';
                           final heat = _getStringValue(r, const ['Heat_Number', 'HeatNo', 'Heat']) ?? '';
                           final qty = _getDoubleValue(r, const ['Qty', 'Quantity', 'Stock', 'Balance', 'Saldo']) ?? 0.0;
-                          
+
+                          final primaryTitle = (name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item ${i + 1}'));
+                          final infoParts = <String>[];
+                          if (code.isNotEmpty) infoParts.add('Code: $code');
+                          // Always show Lot, using '-' when empty
+                          infoParts.add('Lot: ${lot.isEmpty ? '-' : lot}');
+                          if (heat.isNotEmpty) infoParts.add('Heat: $heat');
+
                           return ListTile(
                             leading: const Icon(Icons.inventory_2_outlined),
-                            title: Text(name.isNotEmpty ? name : code),
+                            title: Text(primaryTitle),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if ([
-                                  if (code.isNotEmpty) 'Code: $code',
-                                  if (lot.isNotEmpty) 'Lot: $lot',
-                                  if (heat.isNotEmpty) 'Heat: $heat',
-                                ].isNotEmpty)
+                                if (infoParts.isNotEmpty)
                                   Text(
-                                    [
-                                      if (code.isNotEmpty) 'Code: $code',
-                                      if (lot.isNotEmpty) 'Lot: $lot',
-                                      if (heat.isNotEmpty) 'Heat: $heat',
-                                    ].join(' • '),
+                                    infoParts.join(' • '),
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                 const SizedBox(height: 2),
@@ -2647,80 +2749,85 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                   padding: const EdgeInsets.all(16),
                                   child: Column(
                                     children: [
-                                      if (_isVisible('Supply Number') || _isVisible('Supply Date'))
+                                      if (_isVisible('Supply Number'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Supply Number'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _supplyNumberController,
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _supplyNumberController,
+                                                readOnly: _isReadOnly('Supply Number'),
+                                                decoration: _inputDecoration(
+                                                  'Supply Number',
                                                   readOnly: _isReadOnly('Supply Number'),
-                                                  decoration: _inputDecoration(
-                                                    'Supply Number',
-                                                    readOnly: _isReadOnly('Supply Number'),
-                                                  ),
-                                                  validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                                 ),
+                                                validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                               ),
-                                            if (_isVisible('Supply Number') && _isVisible('Supply Date'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Supply Date'))
-                                              Expanded(
-                                                child: InkWell(
-                                                  onTap: _isReadOnly('Supply Date') ? null : _selectDate,
-                                                  child: InputDecorator(
-                                                    decoration: _inputDecoration(
-                                                      'Supply Date',
-                                                      readOnly: _isReadOnly('Supply Date'),
-                                                    ).copyWith(suffixIcon: const Icon(Icons.calendar_today, size: 20)),
-                                                    child: Text(
-                                                      '${_supplyDate.day.toString().padLeft(2, '0')}-${_supplyDate.month.toString().padLeft(2, '0')}-${_supplyDate.year}',
-                                                      style: Theme.of(context).textTheme.bodyMedium,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
+                                            ),
                                           ],
                                         ),
-                                      if (_isVisible('Supply Number') || _isVisible('Supply Date')) const SizedBox(height: 16),
-
-                                      if (_isVisible('Supply From') || _isVisible('Supply To'))
+                                      if (_isVisible('Supply Number')) const SizedBox(height: 16),
+                                      if (_isVisible('Supply Date'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Supply From'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _supplyFromController,
-                                                  readOnly: true,
-                                                  showCursor: false,
-                                                  enableInteractiveSelection: false,
-                                                  onTap: () => _pickWarehouse(isFrom: true),
-                                                  decoration: _inputDecoration(
-                                                    'Supply From',
-                                                    readOnly: true,
-                                                  ).copyWith(
-                                                    suffixIcon: const Icon(Icons.warehouse_outlined),
+                                            Expanded(
+                                              child: InkWell(
+                                                onTap: _isReadOnly('Supply Date') ? null : _selectDate,
+                                                child: InputDecorator(
+                                                  decoration: const InputDecoration(
+                                                    labelText: 'Supply Date',
+                                                    border: OutlineInputBorder(),
+                                                    isDense: true,
+                                                    suffixIcon: Icon(Icons.calendar_today, size: 20),
+                                                  ),
+                                                  child: Text(
+                                                    formatLongDate(_supplyDate),
+                                                    style: Theme.of(context).textTheme.bodyMedium,
                                                   ),
                                                 ),
                                               ),
-                                            if (_isVisible('Supply From') && _isVisible('Supply To'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Supply To'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _supplyToController,
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Supply Date')) const SizedBox(height: 16),
+                                      if (_isVisible('Supply From'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _supplyFromController,
+                                                readOnly: true,
+                                                showCursor: false,
+                                                enableInteractiveSelection: false,
+                                                onTap: () => _pickWarehouse(isFrom: true),
+                                                decoration: _inputDecoration(
+                                                  'Supply From',
                                                   readOnly: true,
-                                                  showCursor: false,
-                                                  enableInteractiveSelection: false,
-                                                  onTap: () => _pickWarehouse(isFrom: false),
-                                                  decoration: _inputDecoration(
-                                                    'Supply To',
-                                                    readOnly: true,
-                                                  ).copyWith(
-                                                    suffixIcon: const Icon(Icons.warehouse_outlined),
-                                                  ),
+                                                ).copyWith(
+                                                  suffixIcon: const Icon(Icons.warehouse_outlined),
                                                 ),
                                               ),
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Supply From')) const SizedBox(height: 16),
+                                      if (_isVisible('Supply To'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _supplyToController,
+                                                readOnly: true,
+                                                showCursor: false,
+                                                enableInteractiveSelection: false,
+                                                onTap: () => _pickWarehouse(isFrom: false),
+                                                decoration: _inputDecoration(
+                                                  'Supply To',
+                                                  readOnly: true,
+                                                ).copyWith(
+                                                  suffixIcon: const Icon(Icons.warehouse_outlined),
+                                                ),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       const SizedBox(height: 16),
@@ -2732,133 +2839,147 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
                             // Order Information
                             ExpansionTile(
+                              key: const PageStorageKey<String>('order_information_tile'),
                               title: const Text(
                                 'Order Information',
                                 style: TextStyle(fontWeight: FontWeight.w600),
                               ),
+                              initiallyExpanded: true,
+                              maintainState: true,
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Column(
                                     children: [
-                                      if (_isVisible('Order No.') || _isVisible('Project No.'))
+                                      if (_isVisible('Order No.'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Order No.'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _orderNoController,
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _orderNoController,
+                                                readOnly: true,
+                                                showCursor: false,
+                                                enableInteractiveSelection: false,
+                                                onTap: _browseOrderEntryItem,
+                                                decoration: _inputDecoration(
+                                                  'Order No.',
                                                   readOnly: true,
-                                                  showCursor: false,
-                                                  enableInteractiveSelection: false,
-                                                  onTap: _browseOrderEntryItem,
-                                                  decoration: _inputDecoration(
-                                                    'Order No.',
-                                                    readOnly: true,
-                                                  ).copyWith(
-                                                    suffixIcon: const Icon(Icons.assignment_outlined),
-                                                  ),
+                                                ).copyWith(
+                                                  suffixIcon: const Icon(Icons.assignment_outlined),
                                                 ),
                                               ),
-                                            if (_isVisible('Order No.') && _isVisible('Project No.'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Project No.'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _projectNoController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Project No.',
-                                                    readOnly: true,
-                                                  ),
-                                                ),
-                                              ),
+                                            ),
                                           ],
                                         ),
-                                      if (_isVisible('Order No.') || _isVisible('Project No.')) const SizedBox(height: 16),
+                                      if (_isVisible('Order No.')) const SizedBox(height: 16),
+                                      if (_isVisible('Project No.'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _projectNoController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration(
+                                                  'Project No.',
+                                                  readOnly: true,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Project No.')) const SizedBox(height: 16),
                                       // Removed Order ID / Seq ID to match desired columns
                                       const SizedBox(height: 16),
-                                      if (_isVisible('Item Code') || _isVisible('Item Name'))
+                                      if (_isVisible('Item Code'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Item Code'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _itemCodeController,
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _itemCodeController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration(
+                                                  'Item Code',
                                                   readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Item Code',
-                                                    readOnly: true,
-                                                  ),
                                                 ),
                                               ),
-                                            if (_isVisible('Item Code') && _isVisible('Item Name'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Item Name'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _itemNameController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Item Name',
-                                                    readOnly: true,
-                                                  ),
-                                                ),
-                                              ),
+                                            ),
                                           ],
                                         ),
-                                      if (_isVisible('Item Code') || _isVisible('Item Name')) const SizedBox(height: 16),
-                                      if (_isVisible('Qty Order') || _isVisible('Heat No'))
+                                      if (_isVisible('Item Code')) const SizedBox(height: 16),
+                                      if (_isVisible('Item Name'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Qty Order'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _qtyOrderController,
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _itemNameController,
+                                                readOnly: true,
+                                                showCursor: false,
+                                                enableInteractiveSelection: false,
+                                                decoration: _inputDecoration(
+                                                  'Item Name',
                                                   readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Qty Order',
-                                                    readOnly: true,
-                                                  ),
-                                                  keyboardType: TextInputType.number,
                                                 ),
                                               ),
-                                            if (_isVisible('Qty Order') && _isVisible('Heat No'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Heat No'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _heatNoController,
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Item Name')) const SizedBox(height: 16),
+                                      if (_isVisible('Qty Order'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _qtyOrderController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration(
+                                                  'Qty Order',
                                                   readOnly: true,
-                                                  decoration: _inputDecoration(
-                                                    'Heat No',
-                                                    readOnly: true,
-                                                  ),
+                                                ),
+                                                keyboardType: TextInputType.number,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Qty Order')) const SizedBox(height: 16),
+                                      if (_isVisible('Heat No'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _heatNoController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration(
+                                                  'Heat No',
+                                                  readOnly: true,
                                                 ),
                                               ),
+                                            ),
                                           ],
                                         ),
                                       const SizedBox(height: 16),
-                                      if (_isVisible('Unit') || _isVisible('Size'))
+                                      if (_isVisible('Unit'))
                                         Row(
                                           children: [
-                                            if (_isVisible('Unit'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _orderUnitController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration('Unit', readOnly: true),
-                                                ),
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _orderUnitController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration('Unit', readOnly: true),
                                               ),
-                                            if (_isVisible('Unit') && _isVisible('Size')) const SizedBox(width: 16),
-                                            if (_isVisible('Size'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _sizeController,
-                                                  readOnly: true,
-                                                  decoration: _inputDecoration('Size', readOnly: true),
-                                                ),
+                                            ),
+                                          ],
+                                        ),
+                                      if (_isVisible('Unit')) const SizedBox(height: 16),
+                                      if (_isVisible('Size'))
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _sizeController,
+                                                readOnly: true,
+                                                decoration: _inputDecoration('Size', readOnly: true),
                                               ),
+                                            ),
                                           ],
                                         ),
                                       const SizedBox(height: 16),
@@ -2882,44 +3003,36 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
                             // References / Template
                             ExpansionTile(
+                              key: const PageStorageKey<String>('references_template_tile'),
                               title: const Text(
                                 'References / Template',
                                 style: TextStyle(fontWeight: FontWeight.w600),
                               ),
+                              maintainState: true,
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Column(
                                     children: [
-                                      if (_isVisible('Reference No.') || _isVisible('Remarks'))
-                                        Row(
-                                          children: [
-                                            if (_isVisible('Reference No.'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _refNoController,
-                                                  readOnly: _isReadOnly('Reference No.'),
-                                                  decoration: _inputDecoration(
-                                                    'Reference No.',
-                                                    readOnly: _isReadOnly('Reference No.'),
-                                                  ),
-                                                ),
-                                              ),
-                                            if (_isVisible('Reference No.') && _isVisible('Remarks'))
-                                              const SizedBox(width: 16),
-                                            if (_isVisible('Remarks'))
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _remarksController,
-                                                  readOnly: _isReadOnly('Remarks'),
-                                                  decoration: _inputDecoration(
-                                                    'Remarks',
-                                                    readOnly: _isReadOnly('Remarks'),
-                                                  ),
-                                                  maxLines: 2,
-                                                ),
-                                              ),
-                                          ],
+                                      if (_isVisible('Reference No.'))
+                                        TextFormField(
+                                          controller: _refNoController,
+                                          readOnly: _isReadOnly('Reference No.'),
+                                          decoration: _inputDecoration(
+                                            'Reference No.',
+                                            readOnly: _isReadOnly('Reference No.'),
+                                          ),
+                                        ),
+                                      if (_isVisible('Reference No.')) const SizedBox(height: 16),
+                                      if (_isVisible('Remarks'))
+                                        TextFormField(
+                                          controller: _remarksController,
+                                          readOnly: _isReadOnly('Remarks'),
+                                          decoration: _inputDecoration(
+                                            'Remarks',
+                                            readOnly: _isReadOnly('Remarks'),
+                                          ),
+                                          maxLines: 2,
                                         ),
                                       if (_isVisible('Save by template'))
                                         CheckboxListTile(
@@ -2954,10 +3067,13 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                             // Signature Information
                             if (_isVisible('Signature Information'))
                               ExpansionTile(
+                                key: const PageStorageKey<String>('signature_information_tile'),
                                 title: const Text(
                                   'Signature Information',
                                   style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
+                                initiallyExpanded: true,
+                                maintainState: true,
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.all(16),
@@ -3036,11 +3152,17 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    // Detail section header
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: SectionHeader(title: 'Detail'),
+                    ),
+                    const SizedBox(height: 8),
                     // Detail card (expandable + horizontal scroll)
                     Card(
                       child: ExpansionTile(
                         title: const Text(
-                          'Detail Items',
+                          'Item',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         initiallyExpanded: true,
@@ -3418,7 +3540,3 @@ class _ColumnMeta {
     );
   }
 }
-
-
-
-
