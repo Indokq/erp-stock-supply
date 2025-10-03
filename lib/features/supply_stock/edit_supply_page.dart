@@ -87,6 +87,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   String _receivedById = '';
   bool _isSaving = false;
   final Set<int> _deletingDetailIndexes = {};
+  bool _isScanning = false;
 
   // Ensure some nested sections stay visible even when metadata is missing
   static const Set<String> _fallbackVisibleCols = {
@@ -326,127 +327,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       final selected = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
         isScrollControlled: true,
-        builder: (context) {
-          final TextEditingController searchCtrl = TextEditingController();
-          List<Map<String, dynamic>> filtered = List.of(rows);
-          String? selectedWarehouseId;
-          Map<String, dynamic>? selectedItem;
-          
-          return StatefulBuilder(
-            builder: (context, setModalState) {
-              void applyFilter(String q) {
-                final query = q.trim().toLowerCase();
-                setModalState(() {
-                  if (query.isEmpty) {
-                    filtered = List.of(rows);
-                  } else {
-                    filtered = rows.where((m) {
-                      final name = (m['Org_Name'] ?? '').toString().toLowerCase();
-                      final code = (m['Org_Code'] ?? '').toString().toLowerCase();
-                      return name.contains(query) || code.contains(query);
-                    }).toList();
-                  }
-                });
-              }
-
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.warehouse_outlined),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              isFrom ? 'Select Supply From' : 'Select Supply To',
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: searchCtrl,
-                        onChanged: applyFilter,
-                        decoration: const InputDecoration(
-                          hintText: 'Search warehouse by name or code...',
-                          prefixIcon: Icon(Icons.search_rounded),
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 6),
-                          itemBuilder: (context, index) {
-                            final m = filtered[index];
-                            final name = (m['Org_Name'] ?? '').toString();
-                            final code = (m['Org_Code'] ?? '').toString();
-                            final id = (m['ID'] ?? '').toString();
-                            final isSelected = selectedWarehouseId == id;
-                            
-                            return ListTile(
-                              dense: true,
-                              leading: const Icon(Icons.location_on_outlined),
-                              title: Text(name),
-                              subtitle: code.isNotEmpty ? Text(code) : null,
-                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
-                              selected: isSelected,
-                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
-                              onTap: () {
-                                setModalState(() {
-                                  selectedWarehouseId = id;
-                                  selectedItem = {
-                                    'id': id,
-                                    'name': name,
-                                  };
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: selectedItem == null
-                                  ? null
-                                  : () => Navigator.pop<Map<String, dynamic>>(context, selectedItem),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primaryBlue,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Confirm Selection'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return _WarehousePickerSheet(
+            title: isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
+            items: rows,
           );
         },
       );
@@ -549,120 +434,136 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       final selected = await showModalBottomSheet<Map<String, String>>(
         context: context,
         isScrollControlled: true,
-        builder: (context) {
-          final TextEditingController searchCtrl = TextEditingController();
-          List<Map<String, dynamic>> filtered = List.of(employeeRows);
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
           String? selectedEmployeeId;
           Map<String, String>? selectedItem;
-
-          void applyFilter(String q) {
-            final qq = q.toLowerCase();
-            filtered = employeeRows.where((m) {
-              final name = _pickName(m).toLowerCase();
-              final code = _pickCode(m).toLowerCase();
-              return name.contains(qq) || code.contains(qq);
-            }).toList();
-          }
-
           return StatefulBuilder(
             builder: (context, setModal) {
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.person_search_rounded),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Select $field',
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                            ),
+              return DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                builder: (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade400,
+                            borderRadius: BorderRadius.circular(2),
                           ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: searchCtrl,
-                        onChanged: (v) => setModal(() => applyFilter(v)),
-                        decoration: const InputDecoration(
-                          hintText: 'Search by name or code...',
-                          prefixIcon: Icon(Icons.search_rounded),
-                          border: OutlineInputBorder(),
-                          isDense: true,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 6),
-                          itemBuilder: (context, index) {
-                            final m = filtered[index];
-                            final name = _pickName(m);
-                            final code = _pickCode(m);
-                            final id = _pickId(m);
-                            final itemId = id.isNotEmpty ? id : (code.isNotEmpty ? code : index.toString());
-                            final isSelected = selectedEmployeeId == itemId;
-
-                            return ListTile(
-                              dense: true,
-                              leading: const Icon(Icons.person_outline_rounded),
-                              title: Text(name),
-                              subtitle: code.isNotEmpty ? Text(code) : null,
-                              trailing: isSelected
-                                  ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
-                                  : const Icon(Icons.chevron_right, color: Colors.grey),
-                              selected: isSelected,
-                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
-                              onTap: () {
-                                setModal(() {
-                                  selectedEmployeeId = itemId;
-                                  selectedItem = {
-                                    'id': id,
-                                    'name': name,
-                                  };
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: selectedItem == null
-                                  ? null
-                                  : () => Navigator.pop<Map<String, String>>(context, selectedItem),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primaryBlue,
-                                foregroundColor: Colors.white,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Pilih $field',
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                               ),
-                              child: const Text('Confirm Selection'),
-                            ),
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () => Navigator.of(sheetContext).pop(),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const Divider(height: 1),
+                        Flexible(
+                          child: ListView.separated(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: employeeRows.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final m = employeeRows[index];
+                              final name = _pickName(m);
+                              final code = _pickCode(m);
+                              final id = _pickId(m);
+                              final itemId = id.isNotEmpty ? id : (code.isNotEmpty ? code : index.toString());
+                              final isSelected = selectedEmployeeId == itemId;
+
+                              // Optional position/department like in create page
+                              String? position;
+                              for (final k in const ['Position', 'Job_Position', 'JobPosition', 'Department', 'Dept']) {
+                                final v = m[k];
+                                if (v != null && v.toString().trim().isNotEmpty) { position = v.toString(); break; }
+                              }
+                              final details = <String>[];
+                              if (code.isNotEmpty) details.add(code);
+                              if (position != null && position!.isNotEmpty) details.add(position!);
+
+                              return ListTile(
+                                leading: const CircleAvatar(
+                                  backgroundColor: Color(0xFFE3F2FD),
+                                  child: Icon(Icons.person, color: Color(0xFF1976D2)),
+                                ),
+                                title: Text(
+                                  name,
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                subtitle: details.isEmpty ? null : Text(
+                                  details.join(' • '),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                                trailing: isSelected
+                                    ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
+                                    : const Icon(Icons.chevron_right, color: Colors.grey),
+                                selected: isSelected,
+                                selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                                onTap: () {
+                                  setModal(() {
+                                    selectedEmployeeId = itemId;
+                                    selectedItem = {
+                                      'id': id,
+                                      'name': name,
+                                    };
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.of(sheetContext).pop(),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: selectedItem == null
+                                      ? null
+                                      : () => Navigator.pop<Map<String, String>>(sheetContext, selectedItem),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryBlue,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('OK'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -1475,7 +1376,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                 backgroundColor: AppColors.primaryBlue,
                                 foregroundColor: Colors.white,
                               ),
-                              child: const Text('Confirm Selection'),
+                              child: const Text('OK'),
                             ),
                           ),
                         ],
@@ -1866,6 +1767,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
 
   Future<void> _scanQRForDetailItem(int index) async {
     if (widget.readOnly) return;
+    // Prevent rapid re-entry
+    if (_isScanning) return;
+    _isScanning = true;
 
     final fromId = _tryParseInt(_supplyFromId) ?? _tryParseInt(widget.header.fromId) ?? 0;
     if (fromId == 0) {
@@ -1875,11 +1779,13 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           backgroundColor: Colors.orange,
         ),
       );
+      _isScanning = false;
       return;
     }
 
     final scanResult = await BarcodeScannerService.instance.scanBarcode();
     if (scanResult.isCanceled) {
+      _isScanning = false;
       return;
     }
     if (!scanResult.isSuccess) {
@@ -1889,6 +1795,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           SnackBar(content: Text(message), backgroundColor: Colors.orange),
         );
       }
+      _isScanning = false;
       return;
     }
 
@@ -1951,6 +1858,8 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Gagal memproses barcode: $e'), backgroundColor: Colors.redAccent),
       );
+    } finally {
+      _isScanning = false;
     }
   }
 
@@ -3292,6 +3201,182 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     const SizedBox(height: 32),
                   ],
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WarehousePickerSheet extends StatefulWidget {
+  const _WarehousePickerSheet({
+    required this.title,
+    required this.items,
+    this.initialQuery,
+    this.onQueryChanged,
+  });
+
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final String? initialQuery;
+  final ValueChanged<String>? onQueryChanged;
+
+  @override
+  State<_WarehousePickerSheet> createState() => _WarehousePickerSheetState();
+}
+
+class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
+  late final TextEditingController _searchCtrl;
+  late final FocusNode _searchFocusNode;
+  late List<Map<String, dynamic>> _filtered;
+  String? _selectedWarehouseId;
+  Map<String, dynamic>? _selectedItem;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: widget.initialQuery ?? '');
+    _searchFocusNode = FocusNode();
+    _filtered = List.of(widget.items);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter(String q) {
+    if (widget.onQueryChanged != null) {
+      widget.onQueryChanged!(q);
+    }
+    final qq = q.trim().toLowerCase();
+    setState(() {
+      _filtered = qq.isEmpty
+          ? List.of(widget.items)
+          : widget.items.where((raw) {
+              final name = (raw['Org_Name'] ?? '').toString().toLowerCase();
+              final code = (raw['Org_Code'] ?? '').toString().toLowerCase();
+              return name.contains(qq) || code.contains(qq);
+            }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                focusNode: _searchFocusNode,
+                onChanged: _applyFilter,
+                decoration: const InputDecoration(
+                  hintText: 'Cari gudang by nama atau kode...',
+                  prefixIcon: Icon(Icons.search_rounded),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(8),
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final m = _filtered[index];
+                  final name = (m['Org_Name'] ?? '').toString();
+                  final code = (m['Org_Code'] ?? '').toString();
+                  final id = (m['ID'] ?? '').toString();
+
+                  final details = <String>[];
+                  if (code.isNotEmpty) details.add(code);
+                  final isSelected = _selectedWarehouseId == id;
+
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFF3E5F5),
+                      child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                    ),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                    selected: isSelected,
+                    selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                    onTap: () {
+                      setState(() {
+                        _selectedWarehouseId = id;
+                        _selectedItem = m;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _selectedItem == null
+                          ? null
+                          : () => Navigator.of(context).pop(_selectedItem),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('OK'),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

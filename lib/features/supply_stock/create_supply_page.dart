@@ -1308,7 +1308,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               backgroundColor: AppColors.primaryBlue,
                               foregroundColor: Colors.white,
                             ),
-                            child: const Text('Confirm Selection'),
+                            child: const Text('OK'),
                           ),
                         ),
                       ],
@@ -1703,7 +1703,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                   backgroundColor: AppColors.primaryBlue,
                                   foregroundColor: Colors.white,
                                 ),
-                                child: const Text('Confirm Selection'),
+                                child: const Text('OK'),
                               ),
                             ),
                           ],
@@ -3815,10 +3815,14 @@ class _WarehousePickerSheet extends StatefulWidget {
   const _WarehousePickerSheet({
     required this.title,
     required this.items,
+    this.initialQuery,
+    this.onQueryChanged,
   });
 
   final String title;
   final List<Map<String, dynamic>> items;
+  final String? initialQuery;
+  final ValueChanged<String>? onQueryChanged;
 
   @override
   State<_WarehousePickerSheet> createState() => _WarehousePickerSheetState();
@@ -3834,7 +3838,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
   @override
   void initState() {
     super.initState();
-    _searchCtrl = TextEditingController();
+    _searchCtrl = TextEditingController(text: widget.initialQuery ?? '');
     _searchFocusNode = FocusNode();
     _filtered = List.of(widget.items);
   }
@@ -3847,6 +3851,9 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
   }
 
   void _applyFilter(String q) {
+    if (widget.onQueryChanged != null) {
+      widget.onQueryChanged!(q);
+    }
     final qq = q.trim().toLowerCase();
     setState(() {
       _filtered = qq.isEmpty
@@ -3971,7 +3978,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                         backgroundColor: AppColors.primaryBlue,
                         foregroundColor: Colors.white,
                       ),
-                      child: const Text('Confirm Selection'),
+                      child: const Text('OK'),
                     ),
                   ),
                 ],
