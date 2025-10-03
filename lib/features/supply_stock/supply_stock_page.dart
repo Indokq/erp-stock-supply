@@ -11,6 +11,7 @@ import 'models/supply_header.dart';
 import 'models/supply_detail_item.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/responsive/responsive.dart';
+import '../../core/navigation/route_observer.dart';
 
 class SupplyStockPage extends StatefulWidget {
   const SupplyStockPage({super.key});
@@ -19,7 +20,7 @@ class SupplyStockPage extends StatefulWidget {
   State<SupplyStockPage> createState() => _SupplyStockPageState();
 }
 
-class _SupplyStockPageState extends State<SupplyStockPage> {
+class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
   List<SupplyStock> _supplyStocks = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -41,11 +42,32 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribe to route changes to refresh when coming back from child pages
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    if (route != null && route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    // Unsubscribe from route observer
+    appRouteObserver.unsubscribe(this);
     super.dispose();
   }
+
+  @override
+  void didPopNext() {
+    // Called when a covered route (e.g., Create/Edit) has been popped and this
+    // page becomes visible again. Refresh the list.
+    _loadSupplyStocks();
+  }
+
+  
 
   void _onSearchChanged() {
     setState(() {
@@ -162,6 +184,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
 
     try {
       final detailSeqIds = <String>[];
+      int detailCount = 0;
       const companyId = 1;
       final detailResult = await ApiService.getSupplyDetail(
         supplyCls: 1,
@@ -176,6 +199,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           final list = data['tbl1'];
           if (list is List) {
             for (final row in list.whereType<Map>()) {
+              detailCount++;
               final seq = _extractSeqId(row.cast<String, dynamic>());
               if (seq != null && seq.isNotEmpty) {
                 debugPrint('Deleting detail seq $seq for supply ${supply.supplyId}');
@@ -186,17 +210,59 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         }
       }
 
-      if (detailSeqIds.isNotEmpty) {
+      // If there are any detail rows at all, block header deletion and show alert.
+      if (detailCount > 0) {
         if (progressShown && mounted) {
           Navigator.of(context, rootNavigator: true).pop();
           progressShown = false;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Supply ${supply.supplyNo} masih memiliki ${detailSeqIds.length} detail item. Hapus detail terlebih dahulu sebelum menghapus header.',
+        // Show alert instead of snackbar when there are details present
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Text('Tidak Bisa Menghapus'),
+              ],
             ),
-            backgroundColor: Colors.orange,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  'Dokumen: ${supply.supplyNo}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                Text('Detail item: ${detailCount}'),
+                const SizedBox(height: 10),
+                const Text('Hapus semua detail terlebih dahulu sebelum menghapus header.'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('BATAL'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await _openSupplyForEdit(supply);
+                },
+                child: const Text('KELOLA DETAIL'),
+              ),
+            ],
           ),
         );
         return;
@@ -302,6 +368,75 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         SnackBar(
           content: Text('Error menghapus supply: $e'),
           backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openSupplyForEdit(SupplyStock supply) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await ApiService.getSupplyHeader(
+        supplyCls: 1,
+        supplyId: supply.supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (result['success'] == true) {
+        final data = result['data'];
+        final List? tbl1 = data['tbl1'] as List?;
+        final Map<String, dynamic>? headerJson = (tbl1 != null && tbl1.isNotEmpty)
+            ? (tbl1.first as Map).cast<String, dynamic>()
+            : null;
+
+        if (headerJson != null) {
+          final List<SupplyDetailItem> detailItems = [];
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditSupplyPage(
+                header: SupplyHeader.fromJson(headerJson),
+                initialItems: detailItems,
+              ),
+            ),
+          );
+          if (mounted) {
+            _loadSupplyStocks();
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gagal memuat data supply'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        final message = result['message'] ?? 'Gagal memuat data supply';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading supply: $e'),
+          backgroundColor: Colors.red,
         ),
       );
     }

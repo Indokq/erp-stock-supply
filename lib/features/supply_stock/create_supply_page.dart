@@ -59,6 +59,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   final _remarksController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isScanning = false;
   bool _useTemplate = false;
   String _templateName = '';
   final _templateNameController = TextEditingController();
@@ -555,15 +556,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         int? resolvedItemId = item.itemId;
         int? resolvedUnitId = item.unitId;
         if (resolvedItemId == null || resolvedItemId <= 0) {
+          // Only trust explicit item id fields, don't use generic 'ID' or code
           resolvedItemId = resolveInt(item.raw?['Item_ID']) ??
               resolveInt(item.raw?['ItemId']) ??
-              resolveInt(item.raw?['ID']) ??
-              int.tryParse(code);
+              resolveInt(item.raw?['ItemID']) ??
+              resolveInt(item.raw?['Item_Id']);
         }
 
         if (resolvedUnitId == null || resolvedUnitId <= 0) {
           resolvedUnitId = resolveInt(item.raw?['Unit_ID']) ??
               resolveInt(item.raw?['UnitId']) ??
+              resolveInt(item.raw?['UnitID']) ??
               resolveInt(item.raw?['UOM_ID']) ??
               resolveInt(item.raw?['UomId']) ??
               resolveInt(item.raw?['Item_Unit_ID']) ??
@@ -576,6 +579,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           _showErrorMessage('Item "$code" tidak memiliki ID yang valid. Header tidak akan disimpan.');
           return;
         }
+
 
         final seqId = _resolveSeqIdForDetail(item);
 
@@ -632,25 +636,51 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
       debugPrint('⚠️ STOCK VALIDATION SKIPPED - PROCEEDING WITH API CALL');
 
-      final result = await ApiService.createSupplyWithDetails(
-        supplyCls: 1,
-        supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
-        supplyDateDdMmmYyyy: supplyDateFmt,
-        fromId: fromId,
-        toId: toId,
-        orderId: orderId,
-        orderSeq: orderSeq,
-        refNo: refNo,
-        remarks: remarks.isEmpty ? '' : remarks,
-        templateSts: templateSts,
-        templateName: templateName,
-        preparedBy: preparedBy,
-        approvedBy: approvedBy,
-        receivedBy: receivedBy,
-        companyId: 1,
-        userEntry: 'admin',
-        details: detailsPayload,
-      );
+      Map<String, dynamic> result;
+      // If we already have a Supply_ID (saved before), update header and only add new details.
+      final existingId = int.tryParse(_supplyIdController.text.trim());
+      if (existingId != null && existingId > 0) {
+        result = await ApiService.updateSupplyWithNewDetails(
+          supplyId: existingId,
+          supplyCls: 1,
+          supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+          supplyDateDdMmmYyyy: supplyDateFmt,
+          fromId: fromId,
+          toId: toId,
+          orderId: orderId,
+          orderSeq: orderSeq,
+          refNo: refNo,
+          remarks: remarks.isEmpty ? '' : remarks,
+          templateSts: templateSts,
+          templateName: templateName,
+          preparedBy: preparedBy,
+          approvedBy: approvedBy,
+          receivedBy: receivedBy,
+          companyId: 1,
+          userEntry: 'admin',
+          details: detailsPayload,
+        );
+      } else {
+        result = await ApiService.createSupplyWithDetails(
+          supplyCls: 1,
+          supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+          supplyDateDdMmmYyyy: supplyDateFmt,
+          fromId: fromId,
+          toId: toId,
+          orderId: orderId,
+          orderSeq: orderSeq,
+          refNo: refNo,
+          remarks: remarks.isEmpty ? '' : remarks,
+          templateSts: templateSts,
+          templateName: templateName,
+          preparedBy: preparedBy,
+          approvedBy: approvedBy,
+          receivedBy: receivedBy,
+          companyId: 1,
+          userEntry: 'admin',
+          details: detailsPayload,
+        );
+      }
 
       if (!mounted) return;
 
@@ -666,6 +696,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             backgroundColor: AppColors.success,
           ),
         );
+        // After updating, reload details so the form reflects server state
+        await _loadSupplyDetails();
         // Tetap di halaman Create setelah save sukses
         // Opsional: scroll ke atas atau highlight nomor dokumen baru
         // Tidak melakukan Navigator.pop agar tetap di halaman ini
@@ -2333,6 +2365,69 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
   }
 
+  Future<void> _loadSupplyDetails() async {
+    final idText = _supplyIdController.text.trim();
+    final supplyId = int.tryParse(idText);
+    if (supplyId == null || supplyId <= 0) {
+      return;
+    }
+
+    try {
+      final res = await ApiService.getSupplyDetail(
+        supplyCls: 1,
+        supplyId: supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+      );
+
+      if (res['success'] == true) {
+        final data = res['data'];
+        final rows = (data is Map<String, dynamic>) ? data['tbl1'] : null;
+        final items = <SupplyDetailItem>[];
+        if (rows is List) {
+          for (final r in rows.whereType<Map>()) {
+            final m = r.cast<String, dynamic>();
+            final itemCode = _getStringValue(m, const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'ColCode'], partialMatches: const ['itemcode', 'code']);
+            final itemName = _getStringValue(m, const ['Item_Name', 'ItemName', 'Name', 'Description', 'Column1', 'Column_1'], partialMatches: const ['itemname', 'description']);
+            final lot = _getStringValue(m, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot']);
+            final heat = _getStringValue(m, const ['Heat_No', 'HeatNo', 'Heat_Number']);
+            final unit = _getStringValue(m, const ['Unit', 'Item_Unit', 'UOM', 'Unit_Stock'], partialMatches: const ['unit', 'uom']);
+            final size = _getStringValue(m, const ['Size', 'Item_Size', 'colSize', 'ColSize'], partialMatches: const ['size', 'dimension']);
+            final qtyString = _getStringValue(m, const ['Qty', 'Quantity', 'Qty_Order']);
+            final qty = qtyString != null ? double.tryParse(qtyString.replaceAll(',', '')) ?? 0.0 : 0.0;
+            final itemId = _parseIntValue(_getFirstValue(m, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'id']));
+            final unitId = _parseIntValue(_getFirstValue(m, const ['Unit_ID', 'UnitId', 'UOM_ID', 'Unit_Stock'], partialMatches: const ['unitid', 'uomid']));
+            final seqId = _getStringValue(m, const ['Seq_ID', 'SeqId', 'Seq', 'Seq_ID_Detail'], partialMatches: const ['seq']) ?? '0';
+            final desc = _getStringValue(m, const ['Description', 'Desc', 'Remark', 'Remarks', 'Notes'], partialMatches: const ['desc', 'remark', 'notes']) ?? '';
+
+            items.add(
+              SupplyDetailItem(
+                itemCode: itemCode ?? '',
+                itemName: itemName ?? '',
+                qty: qty,
+                unit: unit ?? '',
+                lotNumber: lot ?? '',
+                heatNumber: heat ?? '',
+                description: desc,
+                size: size ?? '',
+                itemId: itemId,
+                seqId: seqId,
+                unitId: unitId,
+                raw: m,
+              ),
+            );
+          }
+        }
+
+        setState(() {
+          _detailItems = items.isNotEmpty ? items : [_createEmptyDetailItem()];
+        });
+      }
+    } catch (_) {
+      // Ignore load errors silently
+    }
+  }
+
   void _navigateToBlankPage() {
     // Langsung ke halaman create supply baru yang blank
     Navigator.pushReplacement(
@@ -2584,11 +2679,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         ? double.tryParse(qtyString.replaceAll(',', '.'))
         : null;
 
+    // Resolve itemId only from explicit item-id fields; avoid generic 'ID' which is often a row index
     final itemId = _parseIntValue(
       _getFirstValue(
         combinedRaw,
-        const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'ID'],
-        partialMatches: const ['itemid', 'stockid', 'id'],
+        const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id'],
+        partialMatches: const ['itemid'],
       ),
     );
     final unitId = _parseIntValue(
@@ -2805,20 +2901,28 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   }
 
   Future<void> _scanQRForDetailItem(int rowIndex) async {
+    if (_isScanning) {
+      // Prevent concurrent scanner launches; allow next tap after current finishes
+      return;
+    }
+    _isScanning = true;
     final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
     if (fromId == 0) {
       _showErrorMessage('Pilih gudang From terlebih dahulu sebelum scan barcode');
+      _isScanning = false;
       return;
     }
 
     final scanResult = await BarcodeScannerService.instance.scanBarcode();
     if (scanResult.isCanceled) {
+      _isScanning = false;
       return;
     }
     if (!scanResult.isSuccess) {
       if (scanResult.message != null && scanResult.message!.trim().isNotEmpty) {
         _showErrorMessage(scanResult.message!);
       }
+      _isScanning = false;
       return;
     }
 
@@ -2896,6 +3000,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     } catch (e) {
       _showErrorMessage('Gagal memproses barcode: $e');
     } finally {
+      _isScanning = false;
       if (mounted) setState(() => _isLoading = false);
     }
   }

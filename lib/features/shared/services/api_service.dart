@@ -647,8 +647,15 @@ class ApiService {
         final responseData = jsonDecode(response.body);
         final message = responseData['msg'] as String?;
         if (message != null && message.contains('ERR@')) {
-          print('❌ saveSupplyDetail ERROR: ${message.replaceAll('ERR@', '').trim()}');
-          return {'success': false, 'message': message.replaceAll('ERR@', '').trim()};
+          final err = message.replaceAll('ERR@', '').trim();
+          // Treat certain stock warnings as non-blocking success
+          final lowered = err.toLowerCase();
+          if (err.isEmpty || lowered.contains('not enough than supply') || lowered.contains('next transaction')) {
+            print('⚠️ saveSupplyDetail WARNING (treated as success): $err');
+            return {'success': true, 'warning': true, 'message': err.isEmpty ? 'Detail saved (empty error message)' : err, 'data': responseData};
+          }
+          print('❌ saveSupplyDetail ERROR: $err');
+          return {'success': false, 'message': err};
         }
         print('✅ saveSupplyDetail SUCCESS');
         return {'success': true, 'data': responseData, 'message': message ?? 'Detail saved'};
@@ -1197,6 +1204,149 @@ class ApiService {
       'message': allDetailsOk
           ? 'Header and details saved'
           : 'Header saved; some details failed',
+    };
+  }
+
+  static Future<Map<String, dynamic>> updateSupplyWithNewDetails({
+    required int supplyId,
+    required int supplyCls,
+    required String supplyNo,
+    required String supplyDateDdMmmYyyy,
+    required int fromId,
+    required int toId,
+    required int orderId,
+    required String orderSeq,
+    required String refNo,
+    required String remarks,
+    required int templateSts,
+    required String templateName,
+    required int? preparedBy,
+    required int? approvedBy,
+    required int? receivedBy,
+    required int companyId,
+    required String userEntry,
+    required List<Map<String, dynamic>> details,
+  }) async {
+    // First, update header using existing Supply_ID
+    final headerRes = await saveSupplyHeader(
+      supplyCls: supplyCls,
+      supplyId: supplyId,
+      supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+      supplyDateDdMmmYyyy: supplyDateDdMmmYyyy,
+      fromId: fromId,
+      toId: toId,
+      orderId: orderId,
+      orderSeq: orderSeq,
+      refNo: refNo,
+      remarks: remarks,
+      templateSts: templateSts,
+      templateName: templateName,
+      preparedBy: preparedBy,
+      approvedBy: approvedBy,
+      receivedBy: receivedBy,
+      companyId: companyId,
+      userEntry: userEntry,
+    );
+
+    if (headerRes['success'] != true) {
+      return {
+        'success': false,
+        'message': headerRes['message'] ?? 'Failed to update header',
+      };
+    }
+
+    // Fetch current details to avoid duplicates
+    final currentRes = await getSupplyDetail(
+      supplyCls: supplyCls,
+      supplyId: supplyId,
+      userEntry: userEntry,
+      companyId: companyId,
+    );
+
+    final existingKeys = <String>{};
+    if (currentRes['success'] == true) {
+      final data = currentRes['data'];
+      final rows = (data is Map<String, dynamic>) ? data['tbl1'] : null;
+      if (rows is List) {
+        for (final r in rows.whereType<Map>()) {
+          final m = r.cast<dynamic, dynamic>();
+          int? itemId;
+          String lot = '';
+          String heat = '';
+          String size = '';
+
+          int? _toInt(dynamic v) {
+            if (v == null) return null;
+            if (v is int) return v;
+            if (v is num) return v.toInt();
+            final t = v.toString().trim();
+            return int.tryParse(t);
+          }
+          String _str(dynamic v) => (v?.toString() ?? '').trim();
+
+          itemId = _toInt(m['Item_ID'] ?? m['ItemId'] ?? m['ID']);
+          lot = _str(m['Lot_Number'] ?? m['Lot_No'] ?? m['Lot'] ?? m['LotNo']);
+          heat = _str(m['Heat_Number'] ?? m['Heat_No'] ?? m['Heat'] ?? m['HeatNo']);
+          size = _str(m['Size'] ?? m['Dimension'] ?? m['Item_Size']);
+
+          final key = '${itemId ?? 0}#${lot.toLowerCase()}#${heat.toLowerCase()}#${size.toLowerCase()}';
+          existingKeys.add(key);
+        }
+      }
+    }
+
+    // Save only new details (not existing)
+    final results = <Map<String, dynamic>>[];
+    bool allDetailsOk = true;
+    for (var i = 0; i < details.length; i++) {
+      final d = details[i];
+      final itemId = (d['itemId'] as int?);
+      final qty = (d['qty'] as num?)?.toDouble() ?? 0.0;
+      final lot = (d['lotNumber'] as String? ?? '').trim();
+      final heat = (d['heatNumber'] as String? ?? '').trim();
+      final size = (d['size'] as String? ?? '').trim();
+
+      if (itemId == null || itemId <= 0 || qty <= 0) {
+        results.add({'index': i, 'success': false, 'message': 'Invalid itemId/qty'});
+        allDetailsOk = false;
+        continue;
+      }
+
+      final key = '${itemId}#${lot.toLowerCase()}#${heat.toLowerCase()}#${size.toLowerCase()}';
+      if (existingKeys.contains(key)) {
+        // Skip inserting duplicate; consider this success
+        results.add({'index': i, 'success': true, 'message': 'Skipped duplicate'});
+        continue;
+      }
+
+      final unitId = (d['unitId'] as int?);
+      final description = (d['description'] as String? ?? '').trim();
+      final seqId = (d['seqId']?.toString().trim().isNotEmpty == true) ? d['seqId'].toString().trim() : '0';
+
+      final res = await saveSupplyDetail(
+        supplyId: supplyId,
+        seqId: seqId,
+        itemId: itemId,
+        qty: qty,
+        unitId: unitId,
+        lotNumber: lot,
+        heatNumber: heat,
+        size: size,
+        description: description,
+        userEntry: userEntry,
+      );
+
+      final success = res['success'] == true;
+      results.add({'index': i, 'success': success, 'message': res['message'], 'data': res['data']});
+      if (!success) allDetailsOk = false;
+    }
+
+    return {
+      'success': allDetailsOk,
+      'headerId': supplyId,
+      'header': headerRes['data'],
+      'details': results,
+      'message': allDetailsOk ? 'Header updated and new details saved' : 'Header updated; some new details failed',
     };
   }
 
