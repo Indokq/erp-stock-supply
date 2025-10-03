@@ -799,146 +799,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          final TextEditingController searchCtrl = TextEditingController();
-          List<Map<String, dynamic>> filteredRaw = List.of(items);
-          String? selectedWarehouseId;
-          Map<String, dynamic>? selectedItem;
-
-          void applyFilter(String q) {
-            final qq = q.trim().toLowerCase();
-            filteredRaw = qq.isEmpty
-                ? List.of(items)
-                : items.where((raw) {
-                    final name = (raw['Org_Name'] ?? '').toString().toLowerCase();
-                    final code = (raw['Org_Code'] ?? '').toString().toLowerCase();
-                    return name.contains(qq) || code.contains(qq);
-                  }).toList();
-          }
-
-          return StatefulBuilder(
-            builder: (context, setModal) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: searchCtrl,
-                          onChanged: (v) => setModal(() { applyFilter(v); }),
-                          decoration: const InputDecoration(
-                            hintText: 'Cari gudang by nama atau kode...',
-                            prefixIcon: Icon(Icons.search_rounded),
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1),
-                      Flexible(
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: filteredRaw.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final m = filteredRaw[index];
-                            final name = (m['Org_Name'] ?? '').toString();
-                            final code = (m['Org_Code'] ?? '').toString();
-                            final id = (m['ID'] ?? '').toString();
-
-                            final selection = Map<String, dynamic>.from(m)
-                              ..putIfAbsent('_displayName', () => name)
-                              ..putIfAbsent('_displayCode', () => code);
-
-                            final details = <String>[];
-                            if (code.isNotEmpty) details.add(code);
-
-                            // Use warehouse ID for comparison
-                            final isSelected = selectedWarehouseId == id;
-
-                            return ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFF3E5F5),
-                                child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
-                              ),
-                              title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
-                              selected: isSelected,
-                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
-                              onTap: () {
-                                setModal(() {
-                                  selectedWarehouseId = id;
-                                  selectedItem = selection;
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.of(sheetContext).pop(),
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: selectedItem == null
-                                    ? null
-                                    : () => Navigator.of(sheetContext).pop(selectedItem),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryBlue,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: const Text('Confirm Selection'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+          return _WarehousePickerSheet(
+            title: isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
+            items: items,
           );
         },
       );
@@ -1296,15 +1159,20 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           Map<String, dynamic>? selectedItem;
           return StatefulBuilder(
             builder: (context, setModal) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+              return DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                builder: (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       Container(
                         width: 40,
                         height: 4,
@@ -1333,6 +1201,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   const Divider(height: 1),
                   Flexible(
                     child: ListView.separated(
+                      controller: scrollController,
                       padding: const EdgeInsets.all(8),
                       itemCount: visibleItems.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
@@ -1448,6 +1317,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                 ],
               ),
             ),
+                ),
               );
             },
           );
@@ -1676,15 +1546,20 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           Map<String, dynamic>? selectedItem;
           return StatefulBuilder(
             builder: (context, setModal) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+              return DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                builder: (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       Container(
                         width: 40,
                         height: 4,
@@ -1713,6 +1588,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       const Divider(height: 1),
                       Flexible(
                         child: ListView.separated(
+                          controller: scrollController,
                           padding: const EdgeInsets.all(8),
                           itemCount: visibleItems.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
@@ -1835,6 +1711,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       ),
                     ],
                   ),
+                ),
                 ),
               );
             },
@@ -3929,6 +3806,179 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+class _WarehousePickerSheet extends StatefulWidget {
+  const _WarehousePickerSheet({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<Map<String, dynamic>> items;
+
+  @override
+  State<_WarehousePickerSheet> createState() => _WarehousePickerSheetState();
+}
+
+class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
+  late final TextEditingController _searchCtrl;
+  late final FocusNode _searchFocusNode;
+  late List<Map<String, dynamic>> _filtered;
+  String? _selectedWarehouseId;
+  Map<String, dynamic>? _selectedItem;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+    _searchFocusNode = FocusNode();
+    _filtered = List.of(widget.items);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter(String q) {
+    final qq = q.trim().toLowerCase();
+    setState(() {
+      _filtered = qq.isEmpty
+          ? List.of(widget.items)
+          : widget.items.where((raw) {
+              final name = (raw['Org_Name'] ?? '').toString().toLowerCase();
+              final code = (raw['Org_Code'] ?? '').toString().toLowerCase();
+              return name.contains(qq) || code.contains(qq);
+            }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                focusNode: _searchFocusNode,
+                onChanged: _applyFilter,
+                decoration: InputDecoration(
+                  hintText: 'Cari gudang by nama atau kode...',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(8),
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final m = _filtered[index];
+                  final name = (m['Org_Name'] ?? '').toString();
+                  final code = (m['Org_Code'] ?? '').toString();
+                  final id = (m['ID'] ?? '').toString();
+
+                  final selection = Map<String, dynamic>.from(m)
+                    ..putIfAbsent('_displayName', () => name)
+                    ..putIfAbsent('_displayCode', () => code);
+
+                  final details = <String>[];
+                  if (code.isNotEmpty) details.add(code);
+                  final isSelected = _selectedWarehouseId == id;
+
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFF3E5F5),
+                      child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                    ),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                    selected: isSelected,
+                    selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                    onTap: () {
+                      setState(() {
+                        _selectedWarehouseId = id;
+                        _selectedItem = selection;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _selectedItem == null
+                          ? null
+                          : () => Navigator.of(context).pop(_selectedItem),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Confirm Selection'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

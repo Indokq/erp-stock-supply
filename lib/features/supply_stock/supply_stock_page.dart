@@ -898,7 +898,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
                 );
               }
             },
-            onDelete: () => _confirmDeleteSupply(supply),
+            // Remove delete from list; delete is handled inside edit page only
           ),
         );
       },
@@ -911,12 +911,10 @@ class SupplyStockCard extends StatelessWidget {
     super.key,
     required this.supply,
     required this.onTap,
-    this.onDelete,
   });
 
   final SupplyStock supply;
   final VoidCallback onTap;
-  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -957,24 +955,11 @@ class SupplyStockCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StatusChip(
-                        label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
-                        tone: supply.stsEdit == 1
-                            ? AppColors.success
-                            : AppColors.textTertiary,
-                      ),
-                      if (onDelete != null) ...[
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Delete',
-                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                          onPressed: onDelete,
-                        ),
-                      ],
-                    ],
+                  StatusChip(
+                    label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
+                    tone: supply.stsEdit == 1
+                        ? AppColors.success
+                        : AppColors.textTertiary,
                   ),
                 ],
               ),

@@ -488,9 +488,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
       }
 
       final data = result['data'] as Map<String, dynamic>;
+      // Collect data rows only (skip tbl0 which usually contains column metadata)
       final List<Map<String, dynamic>> rows = [];
-
-      for (var i = 0; i < 10; i++) {
+      for (var i = 1; i < 12; i++) {
         final key = 'tbl' + i.toString();
         final list = data[key];
         if (list is List) {
@@ -499,8 +499,16 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           }
         }
       }
+      // Filter to keep only entries that look like actual employees
+      final employeeRows = rows.where((m) {
+        final keys = m.keys.map((k) => k.toString().toLowerCase()).toList();
+        bool hasEmpId = keys.any((k) => k.contains('employee_id') || k == 'employeeid');
+        bool hasEmpName = keys.any((k) => k.contains('employee_name') || k == 'employeename');
+        bool hasEmpCode = keys.any((k) => k.contains('employee_code') || k == 'employeecode');
+        return hasEmpId || hasEmpName || hasEmpCode;
+      }).toList();
 
-      if (rows.isEmpty) {
+      if (employeeRows.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('No employees found'),
@@ -543,19 +551,19 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
         isScrollControlled: true,
         builder: (context) {
           final TextEditingController searchCtrl = TextEditingController();
-          List<Map<String, dynamic>> filtered = List.of(rows);
+          List<Map<String, dynamic>> filtered = List.of(employeeRows);
           String? selectedEmployeeId;
           Map<String, String>? selectedItem;
-          
+
           void applyFilter(String q) {
             final qq = q.toLowerCase();
-            filtered = rows.where((m) {
+            filtered = employeeRows.where((m) {
               final name = _pickName(m).toLowerCase();
               final code = _pickCode(m).toLowerCase();
               return name.contains(qq) || code.contains(qq);
             }).toList();
           }
-          
+
           return StatefulBuilder(
             builder: (context, setModal) {
               return SafeArea(
@@ -604,15 +612,15 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                             final id = _pickId(m);
                             final itemId = id.isNotEmpty ? id : (code.isNotEmpty ? code : index.toString());
                             final isSelected = selectedEmployeeId == itemId;
-                            
+
                             return ListTile(
                               dense: true,
                               leading: const Icon(Icons.person_outline_rounded),
                               title: Text(name),
                               subtitle: code.isNotEmpty ? Text(code) : null,
-                              trailing: isSelected 
-                                ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) 
-                                : const Icon(Icons.chevron_right, color: Colors.grey),
+                              trailing: isSelected
+                                  ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
+                                  : const Icon(Icons.chevron_right, color: Colors.grey),
                               selected: isSelected,
                               selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
                               onTap: () {
