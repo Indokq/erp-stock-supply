@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import '../shared/widgets/shared_cards.dart';
+import '../shared/utils/formatters.dart';
 import '../shared/services/api_service.dart';
 import '../shared/services/auth_service.dart';
 import '../shared/services/barcode_scanner_service.dart';
@@ -58,6 +59,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   final _remarksController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isScanning = false;
   bool _useTemplate = false;
   String _templateName = '';
   final _templateNameController = TextEditingController();
@@ -100,17 +102,35 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     'Prepared',
     'Approved',
     'Received',
+    // Ensure key order fields remain visible even if metadata missing/mismatched
+    'Unit',
+    'Size',
+    'Lot No',
   };
 
   bool _isVisible(String colName) {
-    final m = _columnMeta[colName];
+    // Normalize for robust matching (e.g., 'Lot No', 'Lot_No', 'LOT NO')
+    String key = colName.trim();
+    final normalized = _normalizeKey(key);
+
+    // Map common aliases to canonical keys used in UI
+    String canonical = colName;
+    if (normalized.contains('lot') && normalized.contains('no')) {
+      canonical = 'Lot No';
+    } else if (normalized == 'unit' || normalized.contains('uom')) {
+      canonical = 'Unit';
+    } else if (normalized == 'size' || normalized.contains('dimension')) {
+      canonical = 'Size';
+    }
+
+    final m = _columnMeta[canonical] ?? _columnMeta[colName];
     if (m == null) {
-      return _fallbackVisibleCols.contains(colName);
+      return _fallbackVisibleCols.contains(canonical);
     }
     if (m.colVisible == 1) {
       return true;
     }
-    return _fallbackVisibleCols.contains(colName);
+    return _fallbackVisibleCols.contains(canonical);
   }
 
   SupplyDetailItem _cloneDetailItem(SupplyDetailItem item) {
@@ -253,10 +273,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   }
 
   InputDecoration _inputDecoration(String label, {required bool readOnly}) {
-    return InputDecoration(
+    return const InputDecoration().copyWith(
       labelText: label,
       border: const OutlineInputBorder(),
       isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       filled: true,
       fillColor: readOnly ? AppColors.readOnlyYellow : AppColors.surfaceCard,
     );
@@ -535,15 +556,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         int? resolvedItemId = item.itemId;
         int? resolvedUnitId = item.unitId;
         if (resolvedItemId == null || resolvedItemId <= 0) {
+          // Only trust explicit item id fields, don't use generic 'ID' or code
           resolvedItemId = resolveInt(item.raw?['Item_ID']) ??
               resolveInt(item.raw?['ItemId']) ??
-              resolveInt(item.raw?['ID']) ??
-              int.tryParse(code);
+              resolveInt(item.raw?['ItemID']) ??
+              resolveInt(item.raw?['Item_Id']);
         }
 
         if (resolvedUnitId == null || resolvedUnitId <= 0) {
           resolvedUnitId = resolveInt(item.raw?['Unit_ID']) ??
               resolveInt(item.raw?['UnitId']) ??
+              resolveInt(item.raw?['UnitID']) ??
               resolveInt(item.raw?['UOM_ID']) ??
               resolveInt(item.raw?['UomId']) ??
               resolveInt(item.raw?['Item_Unit_ID']) ??
@@ -556,6 +579,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           _showErrorMessage('Item "$code" tidak memiliki ID yang valid. Header tidak akan disimpan.');
           return;
         }
+
 
         final seqId = _resolveSeqIdForDetail(item);
 
@@ -612,25 +636,51 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
       debugPrint('⚠️ STOCK VALIDATION SKIPPED - PROCEEDING WITH API CALL');
 
-      final result = await ApiService.createSupplyWithDetails(
-        supplyCls: 1,
-        supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
-        supplyDateDdMmmYyyy: supplyDateFmt,
-        fromId: fromId,
-        toId: toId,
-        orderId: orderId,
-        orderSeq: orderSeq,
-        refNo: refNo,
-        remarks: remarks.isEmpty ? '' : remarks,
-        templateSts: templateSts,
-        templateName: templateName,
-        preparedBy: preparedBy,
-        approvedBy: approvedBy,
-        receivedBy: receivedBy,
-        companyId: 1,
-        userEntry: 'admin',
-        details: detailsPayload,
-      );
+      Map<String, dynamic> result;
+      // If we already have a Supply_ID (saved before), update header and only add new details.
+      final existingId = int.tryParse(_supplyIdController.text.trim());
+      if (existingId != null && existingId > 0) {
+        result = await ApiService.updateSupplyWithNewDetails(
+          supplyId: existingId,
+          supplyCls: 1,
+          supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+          supplyDateDdMmmYyyy: supplyDateFmt,
+          fromId: fromId,
+          toId: toId,
+          orderId: orderId,
+          orderSeq: orderSeq,
+          refNo: refNo,
+          remarks: remarks.isEmpty ? '' : remarks,
+          templateSts: templateSts,
+          templateName: templateName,
+          preparedBy: preparedBy,
+          approvedBy: approvedBy,
+          receivedBy: receivedBy,
+          companyId: 1,
+          userEntry: 'admin',
+          details: detailsPayload,
+        );
+      } else {
+        result = await ApiService.createSupplyWithDetails(
+          supplyCls: 1,
+          supplyNo: supplyNo.isEmpty ? 'AUTO' : supplyNo,
+          supplyDateDdMmmYyyy: supplyDateFmt,
+          fromId: fromId,
+          toId: toId,
+          orderId: orderId,
+          orderSeq: orderSeq,
+          refNo: refNo,
+          remarks: remarks.isEmpty ? '' : remarks,
+          templateSts: templateSts,
+          templateName: templateName,
+          preparedBy: preparedBy,
+          approvedBy: approvedBy,
+          receivedBy: receivedBy,
+          companyId: 1,
+          userEntry: 'admin',
+          details: detailsPayload,
+        );
+      }
 
       if (!mounted) return;
 
@@ -646,7 +696,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             backgroundColor: AppColors.success,
           ),
         );
-        Navigator.pop(context, true);
+        // After updating, reload details so the form reflects server state
+        await _loadSupplyDetails();
+        // Tetap di halaman Create setelah save sukses
+        // Opsional: scroll ke atas atau highlight nomor dokumen baru
+        // Tidak melakukan Navigator.pop agar tetap di halaman ini
       } else {
         _showErrorMessage(result['message'] ?? 'Failed to save header/details');
       }
@@ -687,11 +741,29 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         return;
       }
 
-      final items = _extractRows(data);
-      if (items.isEmpty) {
+      final List<Map<String, dynamic>> rows = [];
+      // Collect rows from typical tbl buckets
+      for (var i = 0; i < 10; i++) {
+        final key = 'tbl$i';
+        final list = data[key];
+        if (list is List) {
+          for (final r in list) {
+            if (r is Map) {
+              final m = r.cast<String, dynamic>();
+              if (m.containsKey('Org_Name')) {
+                rows.add(m);
+              }
+            }
+          }
+        }
+      }
+
+      if (rows.isEmpty) {
         _showErrorMessage('Data gudang tidak tersedia');
         return;
       }
+
+      final items = rows;
 
       // Extract column metadata if available in the response
       final columnMeta = <String, _ColumnMeta>{};
@@ -727,139 +799,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          final TextEditingController searchCtrl = TextEditingController();
-          List<Map<String, dynamic>> filteredRaw = List.of(items);
-
-          void applyFilter(String q) {
-            final qq = q.trim().toLowerCase();
-            filteredRaw = qq.isEmpty
-                ? List.of(items)
-                : items.where((raw) {
-                    final name = _getStringValue(
-                      raw,
-                      const ['Warehouse_Name','WarehouseName','Org_Name','Name','Description','colName','colname','ColName','Colname','colName1','colname1'],
-                      partialMatches: const ['warehouse','gudang','orgname','name'],
-                    ) ?? '';
-                    final code = _getStringValue(
-                      raw,
-                      const ['Warehouse_Code','WarehouseCode','Org_Code','Code','ID','Warehouse_ID','WarehouseId','colCode','colcode'],
-                      partialMatches: const ['warehousecode','gudang','orgcode','code','id'],
-                    ) ?? '';
-                    return name.toLowerCase().contains(qq) || code.toLowerCase().contains(qq);
-                  }).toList();
-          }
-
-          return StatefulBuilder(
-            builder: (context, setModal) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: searchCtrl,
-                          onChanged: (v) => setModal(() { applyFilter(v); }),
-                          decoration: const InputDecoration(
-                            hintText: 'Cari gudang by nama atau kode...',
-                            prefixIcon: Icon(Icons.search_rounded),
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1),
-                      Flexible(
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: filteredRaw.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final rawRow = filteredRaw[index];
-                            // Build visible subset based on metadata
-                            final row = <String, dynamic>{};
-                            for (final entry in rawRow.entries) {
-                              final colName = entry.key;
-                              final colMeta = columnMeta[colName];
-                              if (colMeta == null || colMeta.colVisible == 1) {
-                                row[colName] = entry.value;
-                              }
-                            }
-                            final title = _getStringValue(
-                                  row.isNotEmpty ? row : rawRow,
-                                  const [
-                                    'Warehouse_Name','WarehouseName','Org_Name','Name','Description','colName','colname','ColName','Colname','colName1','colname1',
-                                  ],
-                                  partialMatches: const ['warehouse','gudang','orgname','name'],
-                                ) ?? 'Warehouse ${index + 1}';
-                            final code = _getStringValue(
-                              rawRow,
-                              const ['Warehouse_Code','WarehouseCode','Org_Code','Code','ID','Warehouse_ID','WarehouseId','colCode','colcode'],
-                              partialMatches: const ['warehousecode','gudang','orgcode','code','id'],
-                            );
-                            final location = _getStringValue(
-                              rawRow,
-                              const ['Location','Address','City','colLocation','collocation','colAddr'],
-                              partialMatches: const ['lokasi','location','address','city'],
-                            );
-
-                            final selection = Map<String, dynamic>.from(rawRow)
-                              ..putIfAbsent('_displayName', () => title)
-                              ..putIfAbsent('_displayCode', () => code);
-
-                            final details = <String>[];
-                            if (code != null) details.add(code);
-                            if (location != null) details.add(location);
-
-                            return ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFF3E5F5),
-                                child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
-                              ),
-                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                              onTap: () => Navigator.of(sheetContext).pop(selection),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+          return _WarehousePickerSheet(
+            title: isFrom ? 'Pilih Supply From' : 'Pilih Supply To',
+            items: items,
           );
         },
       );
@@ -881,55 +823,23 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
   void _applyWarehouseSelection(Map<String, dynamic> data, {required bool isFrom}) {
     final controller = isFrom ? _supplyFromController : _supplyToController;
-    final code = _getStringValue(
-      data,
-      const [
-        'Warehouse_Code',
-        'WarehouseCode',
-        'Code',
-        'Warehouse_ID',
-        'WarehouseId',
-        'ID',
-        'colCode',
-        'colcode',
-      ],
-      partialMatches: const ['warehousecode', 'gudang', 'code'],
-    );
-    final name = _getStringValue(
-      data,
-      const [
-        'Warehouse_Name',
-        'WarehouseName',
-        'Name',
-        'Description',
-        'colName',
-        'colname',
-        'ColName',
-        'Colname',
-        'colName1',
-        'colname1',
-      ],
-      partialMatches: const ['warehouse', 'gudang', 'colname', 'name'],
-    );
+    final name = (data['Org_Name'] ?? data['_displayName'] ?? '').toString();
+    final code = (data['Org_Code'] ?? data['_displayCode'] ?? '').toString();
+    final id = (data['ID'] ?? '').toString();
 
-    final chosen = name ?? code ?? _stringifyValue(data['_displayName']);
-    final trimmed = chosen?.trim();
-    final id = _getFirstValue(
-      data,
-      const [
-        'Warehouse_ID', 'WarehouseId', 'WH_ID', 'ID'
-      ],
-      partialMatches: const ['warehouseid', 'whid', 'id'],
-    );
     final idInt = _parseIntValue(id);
     if (isFrom) {
       _fromWarehouseId = idInt;
     } else {
       _toWarehouseId = idInt;
     }
-    debugPrint('Warehouse selection (${isFrom ? 'from' : 'to'}): raw id=$id parsed=$idInt');
-    if (trimmed != null && trimmed.isNotEmpty && controller.text.trim() != trimmed) {
-      controller.text = trimmed;
+    
+    // Build display text with Name only (user request)
+    final chosen = name.isNotEmpty ? name : code;
+    
+    debugPrint('Warehouse selection (${isFrom ? 'from' : 'to'}): id=$id, display=$chosen');
+    if (chosen.isNotEmpty && controller.text.trim() != chosen.trim()) {
+      controller.text = chosen.trim();
     }
     if (idInt == null) {
       debugPrint('⚠️ Warehouse selection is missing numeric ID. Raw value: $id');
@@ -1245,18 +1155,24 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
+          String? selectedOrderId;
           Map<String, dynamic>? selectedItem;
           return StatefulBuilder(
-            builder: (context, setModalState) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+            builder: (context, setModal) {
+              return DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                builder: (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       Container(
                         width: 40,
                         height: 4,
@@ -1285,6 +1201,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   const Divider(height: 1),
                   Flexible(
                     child: ListView.separated(
+                      controller: scrollController,
                       padding: const EdgeInsets.all(8),
                       itemCount: visibleItems.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
@@ -1299,6 +1216,16 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             'Order_Number',
                           ],
                           partialMatches: const ['orderno', 'noorder', 'order', 'number'],
+                        );
+                        final orderId = _getStringValue(
+                          row,
+                          const [
+                            'Order_ID',
+                            'OrderId',
+                            'ID_Order',
+                            'ID',
+                          ],
+                          partialMatches: const ['orderid', 'idorder'],
                         );
                         final projectNo = _getStringValue(
                           row,
@@ -1328,7 +1255,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         if (projectNo != null) details.add('Project: $projectNo');
                         if (description != null) details.add(description);
 
-                        final isSelected = selectedItem == selection;
+                        // Use unique identifier for comparison
+                        final itemId = orderId ?? orderNo ?? index.toString();
+                        final isSelected = selectedOrderId == itemId;
 
                         return ListTile(
                           leading: const CircleAvatar(
@@ -1347,8 +1276,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           selected: isSelected,
                           selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
                           onTap: () {
-                            setModalState(() {
+                            debugPrint('🔘 Order Entry item tapped: $itemId');
+                            setModal(() {
+                              selectedOrderId = itemId;
                               selectedItem = selection;
+                              debugPrint('✅ Order Entry selection state updated: $selectedOrderId');
                             });
                           },
                         );
@@ -1376,7 +1308,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               backgroundColor: AppColors.primaryBlue,
                               foregroundColor: Colors.white,
                             ),
-                            child: const Text('Confirm Selection'),
+                            child: const Text('OK'),
                           ),
                         ),
                       ],
@@ -1385,6 +1317,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                 ],
               ),
             ),
+                ),
               );
             },
           );
@@ -1607,123 +1540,181 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       final selected = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
         isScrollControlled: true,
-        backgroundColor: Colors.transparent, // Make background transparent
+        backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+          String? selectedEmployeeId;
+          Map<String, dynamic>? selectedItem;
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.9,
+                expand: false,
+                builder: (context, scrollController) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'Pilih $field',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(sheetContext).pop(),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Pilih $field',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final name = _getStringValue(
+                      ),
+                      const Divider(height: 1),
+                      Flexible(
+                        child: ListView.separated(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(8),
+                          itemCount: visibleItems.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final row = visibleItems[index];
+                            final employeeId = _getStringValue(
                               row,
                               const [
-                                'Employee_Name',
-                                'EmployeeName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
+                                'Employee_ID',
+                                'EmployeeId',
+                                'ID',
                               ],
-                              partialMatches: const ['employee', 'name', 'colname', 'nama'],
-                            ) ??
-                            'Karyawan ${index + 1}';
-                        final code = _getStringValue(
-                          row,
-                          const [
-                            'Employee_Code',
-                            'EmployeeCode',
-                            'Code',
-                            'Employee_ID',
-                            'EmployeeId',
-                            'ID',
-                            'colCode',
-                            'colcode',
+                              partialMatches: const ['employeeid', 'id'],
+                            );
+                            final name = _getStringValue(
+                                  row,
+                                  const [
+                                    'Employee_Name',
+                                    'EmployeeName',
+                                    'Name',
+                                    'Description',
+                                    'colName',
+                                    'colname',
+                                    'ColName',
+                                    'Colname',
+                                    'colName1',
+                                    'colname1',
+                                  ],
+                                  partialMatches: const ['employee', 'name', 'colname', 'nama'],
+                                ) ??
+                                'Karyawan ${index + 1}';
+                            final code = _getStringValue(
+                              row,
+                              const [
+                                'Employee_Code',
+                                'EmployeeCode',
+                                'Code',
+                                'colCode',
+                                'colcode',
+                              ],
+                              partialMatches: const ['employeecode', 'karyawan', 'code'],
+                            );
+                            final position = _getStringValue(
+                              row,
+                              const [
+                                'Position',
+                                'Job_Position',
+                                'JobPosition',
+                                'Department',
+                                'Dept',
+                              ],
+                              partialMatches: const ['position', 'job', 'dept', 'departemen'],
+                            );
+
+                            final selection = Map<String, dynamic>.from(row)
+                              ..putIfAbsent('_displayName', () => name)
+                              ..putIfAbsent('_displayCode', () => code);
+
+                            final details = <String>[];
+                            if (code != null) details.add(code);
+                            if (position != null) details.add(position);
+
+                            final itemId = employeeId ?? code ?? index.toString();
+                            final isSelected = selectedEmployeeId == itemId;
+
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFE3F2FD),
+                                child: Icon(Icons.person, color: Color(0xFF1976D2)),
+                              ),
+                              title: Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              subtitle: details.isEmpty ? null : Text(
+                                details.join(' • '),
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                              onTap: () {
+                                debugPrint('👤 Employee item tapped: $itemId');
+                                setModal(() {
+                                  selectedEmployeeId = itemId;
+                                  selectedItem = selection;
+                                  debugPrint('✅ Employee selection state updated: $selectedEmployeeId');
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(sheetContext).pop(),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: selectedItem == null
+                                    ? null
+                                    : () => Navigator.of(sheetContext).pop(selectedItem),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryBlue,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('OK'),
+                              ),
+                            ),
                           ],
-                          partialMatches: const ['employeecode', 'karyawan', 'code', 'id'],
-                        );
-                        final position = _getStringValue(
-                          row,
-                          const [
-                            'Position',
-                            'Job_Position',
-                            'JobPosition',
-                            'Department',
-                            'Dept',
-                          ],
-                          partialMatches: const ['position', 'job', 'dept', 'departemen'],
-                        );
-
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayName', () => name)
-                          ..putIfAbsent('_displayCode', () => code);
-
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (position != null) details.add(position);
-
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFE3F2FD),
-                            child: Icon(Icons.person, color: Color(0xFF1976D2)),
-                          ),
-                          title: Text(
-                            name,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: details.isEmpty ? null : Text(
-                            details.join(' • '),
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+                ),
+              );
+            },
           );
         },
       );
@@ -2251,6 +2242,69 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     }
   }
 
+  Future<void> _loadSupplyDetails() async {
+    final idText = _supplyIdController.text.trim();
+    final supplyId = int.tryParse(idText);
+    if (supplyId == null || supplyId <= 0) {
+      return;
+    }
+
+    try {
+      final res = await ApiService.getSupplyDetail(
+        supplyCls: 1,
+        supplyId: supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+      );
+
+      if (res['success'] == true) {
+        final data = res['data'];
+        final rows = (data is Map<String, dynamic>) ? data['tbl1'] : null;
+        final items = <SupplyDetailItem>[];
+        if (rows is List) {
+          for (final r in rows.whereType<Map>()) {
+            final m = r.cast<String, dynamic>();
+            final itemCode = _getStringValue(m, const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'ColCode'], partialMatches: const ['itemcode', 'code']);
+            final itemName = _getStringValue(m, const ['Item_Name', 'ItemName', 'Name', 'Description', 'Column1', 'Column_1'], partialMatches: const ['itemname', 'description']);
+            final lot = _getStringValue(m, const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot']);
+            final heat = _getStringValue(m, const ['Heat_No', 'HeatNo', 'Heat_Number']);
+            final unit = _getStringValue(m, const ['Unit', 'Item_Unit', 'UOM', 'Unit_Stock'], partialMatches: const ['unit', 'uom']);
+            final size = _getStringValue(m, const ['Size', 'Item_Size', 'colSize', 'ColSize'], partialMatches: const ['size', 'dimension']);
+            final qtyString = _getStringValue(m, const ['Qty', 'Quantity', 'Qty_Order']);
+            final qty = qtyString != null ? double.tryParse(qtyString.replaceAll(',', '')) ?? 0.0 : 0.0;
+            final itemId = _parseIntValue(_getFirstValue(m, const ['Item_ID', 'ItemId', 'ID'], partialMatches: const ['itemid', 'id']));
+            final unitId = _parseIntValue(_getFirstValue(m, const ['Unit_ID', 'UnitId', 'UOM_ID', 'Unit_Stock'], partialMatches: const ['unitid', 'uomid']));
+            final seqId = _getStringValue(m, const ['Seq_ID', 'SeqId', 'Seq', 'Seq_ID_Detail'], partialMatches: const ['seq']) ?? '0';
+            final desc = _getStringValue(m, const ['Description', 'Desc', 'Remark', 'Remarks', 'Notes'], partialMatches: const ['desc', 'remark', 'notes']) ?? '';
+
+            items.add(
+              SupplyDetailItem(
+                itemCode: itemCode ?? '',
+                itemName: itemName ?? '',
+                qty: qty,
+                unit: unit ?? '',
+                lotNumber: lot ?? '',
+                heatNumber: heat ?? '',
+                description: desc,
+                size: size ?? '',
+                itemId: itemId,
+                seqId: seqId,
+                unitId: unitId,
+                raw: m,
+              ),
+            );
+          }
+        }
+
+        setState(() {
+          _detailItems = items.isNotEmpty ? items : [_createEmptyDetailItem()];
+        });
+      }
+    } catch (_) {
+      // Ignore load errors silently
+    }
+  }
+
   void _navigateToBlankPage() {
     // Langsung ke halaman create supply baru yang blank
     Navigator.pushReplacement(
@@ -2471,10 +2525,21 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     final heat = resolveValue(
       const ['Heat_No', 'HeatNo', 'Heat_Number'],
     );
-    final unit = resolveValue(
-      const ['Unit', 'Unit_Stock', 'UOM', 'OrderUnit'],
-      partialMatches: const ['unit', 'uom', 'stockunit'],
+    String? unit = resolveValue(
+      const ['OrderUnit', 'Unit', 'UOM', 'Unit_Stock'],
+      partialMatches: const ['orderunit', 'unit', 'uom', 'stockunit'],
     );
+    if (unit != null) {
+      final ut = unit.trim();
+      // If the picked unit looks numeric (likely an ID), try to prefer a textual unit name
+      final isNumeric = RegExp(r'^-?\d+(\.0+)?$').hasMatch(ut);
+      if (isNumeric) {
+        unit = resolveValue(
+              const ['OrderUnit', 'UOM', 'Unit', 'Unit_Name', 'UOM_Name'],
+              partialMatches: const ['orderunit', 'uom', 'unit', 'unitname', 'uomname'],
+            ) ?? ut;
+      }
+    }
     final size = resolveValue(
       const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
       partialMatches: const ['size', 'dimension'],
@@ -2491,11 +2556,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         ? double.tryParse(qtyString.replaceAll(',', '.'))
         : null;
 
+    // Resolve itemId only from explicit item-id fields; avoid generic 'ID' which is often a row index
     final itemId = _parseIntValue(
       _getFirstValue(
         combinedRaw,
-        const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id', 'ID'],
-        partialMatches: const ['itemid', 'stockid', 'id'],
+        const ['Item_ID', 'ItemId', 'ItemID', 'Item_Id'],
+        partialMatches: const ['itemid'],
       ),
     );
     final unitId = _parseIntValue(
@@ -2712,20 +2778,28 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
   }
 
   Future<void> _scanQRForDetailItem(int rowIndex) async {
+    if (_isScanning) {
+      // Prevent concurrent scanner launches; allow next tap after current finishes
+      return;
+    }
+    _isScanning = true;
     final fromId = _fromWarehouseId ?? _parseIntValue(_supplyFromController.text) ?? 0;
     if (fromId == 0) {
       _showErrorMessage('Pilih gudang From terlebih dahulu sebelum scan barcode');
+      _isScanning = false;
       return;
     }
 
     final scanResult = await BarcodeScannerService.instance.scanBarcode();
     if (scanResult.isCanceled) {
+      _isScanning = false;
       return;
     }
     if (!scanResult.isSuccess) {
       if (scanResult.message != null && scanResult.message!.trim().isNotEmpty) {
         _showErrorMessage(scanResult.message!);
       }
+      _isScanning = false;
       return;
     }
 
@@ -2803,6 +2877,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     } catch (e) {
       _showErrorMessage('Gagal memproses barcode: $e');
     } finally {
+      _isScanning = false;
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -2904,13 +2979,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Browse Item Stock',
+                                  'Pilih Item Stock',
                                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                                 ),
-                                Text(
-                                  'From: ${_supplyFromController.text.isEmpty ? 'Not selected' : _supplyFromController.text}',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
+                                // Match Edit style: no extra subtitle line here
                               ],
                             ),
                             IconButton(
@@ -2952,7 +3024,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             const SizedBox(width: 8),
                             ElevatedButton.icon(
                               onPressed: () => setModalState(() { applyFilter(searchCtrl.text); }),
-                              icon: const Icon(Icons.search, size: 18),
                               label: const Text('Search'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primaryBlue,
@@ -2972,27 +3043,56 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final row = filtered[index];
-                            final title = _getStringValue(
-                                  row,
-                                  const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
-                                  partialMatches: const ['itemname','description','colname','namestock','namabarang'],
-                                ) ?? 'Item ${index + 1}';
-                            final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode','SKU'], partialMatches: const ['itemcode','kode','code','sku']);
-                            final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot']);
-                            final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
-                            final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
-                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number']);
+                            final code = _getStringValue(
+                              row,
+                              const ['Item_Code','ItemCode','Code','SKU','colCode','ColCode'],
+                              partialMatches: const ['itemcode','code','sku'],
+                            ) ?? '';
+                            final name = _getStringValue(
+                              row,
+                              const ['Item_Name','ItemName','Name','Title','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                              partialMatches: const ['itemname','name','title','desc','colname','namestock','namabarang'],
+                            ) ?? '';
+                            final lotRaw = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot']);
+                            final lot = (lotRaw == null || lotRaw.trim().isEmpty) ? '-' : lotRaw.trim();
+                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number','Heat']) ?? '';
+                            final qtyNum = double.tryParse((
+                              _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock'])
+                              ?? ''
+                            ).replaceAll(',', '')) ?? 0.0;
 
-                            final details = <String>[];
-                            if (code != null) details.add(code);
-                            if (lot != null) details.add('Lot: $lot');
-                            if (unit != null) details.add(unit);
-                            if (qty != null) details.add('Qty: $qty');
-                            if (heat != null) details.add('Heat: $heat');
+                            final primaryTitle = (name.isNotEmpty ? name : code).isNotEmpty
+                                ? (name.isNotEmpty ? name : code)
+                                : 'Item ${index + 1}';
+
+                            final infoParts = <String>[];
+                            if (code.isNotEmpty) infoParts.add('Code: $code');
+                            // Always show Lot label; if missing, show '-'
+                            infoParts.add('Lot: $lot');
+                            if (heat.isNotEmpty) infoParts.add('Heat: $heat');
 
                             return ListTile(
-                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              leading: const Icon(Icons.inventory_2_outlined),
+                              title: Text(primaryTitle, style: const TextStyle(fontWeight: FontWeight.w500)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (infoParts.isNotEmpty)
+                                    Text(
+                                      infoParts.join(' • '),
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Stock: ${qtyNum.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: qtyNum > 0 ? AppColors.success : Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
                               trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                               onTap: () => Navigator.of(sheetContext).pop(row),
                             );
@@ -3055,7 +3155,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.surfaceLight,
-      appBar: AppBar(title: Text(widget.isEdit ? 'Edit Supply' : 'Create New Supply')),
+        appBar: AppBar(title: Text(widget.isEdit ? 'Edit Supply' : 'Create New Supply')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -3087,10 +3187,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               // Header Section
               Container(
                 color: AppColors.surfaceCard,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   const SectionHeader(title: 'Header'),
                   const SizedBox(height: 16),
                   if (_templateName.isNotEmpty)
@@ -3123,80 +3223,85 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            if (_isVisible('Supply Number') || _isVisible('Supply Date'))
+                            if (_isVisible('Supply Number'))
                               Row(
                                 children: [
-                                  if (_isVisible('Supply Number'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _supplyNumberController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _supplyNumberController,
+                                      readOnly: _isReadOnly('Supply Number'),
+                                      decoration: _inputDecoration(
+                                        'Supply Number',
                                         readOnly: _isReadOnly('Supply Number'),
-                                        decoration: _inputDecoration(
-                                          'Supply Number',
-                                          readOnly: _isReadOnly('Supply Number'),
-                                        ),
-                                        validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                       ),
+                                      validator: (value) => value?.isEmpty == true ? 'Required' : null,
                                     ),
-                                  if (_isVisible('Supply Number') && _isVisible('Supply Date'))
-                                    const SizedBox(width: 16),
-                                  if (_isVisible('Supply Date'))
-                                    Expanded(
-                                      child: InkWell(
-                                        onTap: _isReadOnly('Supply Date') ? null : _selectDate,
-                                        child: InputDecorator(
-                                          decoration: _inputDecoration(
-                                            'Supply Date',
-                                            readOnly: _isReadOnly('Supply Date'),
-                                          ).copyWith(suffixIcon: const Icon(Icons.calendar_today, size: 20)),
-                                          child: Text(
-                                            '${_supplyDate.day.toString().padLeft(2, '0')}-${_supplyDate.month.toString().padLeft(2, '0')}-${_supplyDate.year}',
-                                            style: Theme.of(context).textTheme.bodyMedium,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                  ),
                                 ],
                               ),
-                            if (_isVisible('Supply Number') || _isVisible('Supply Date')) const SizedBox(height: 16),
-
-                            if (_isVisible('Supply From') || _isVisible('Supply To'))
+                            if (_isVisible('Supply Number')) const SizedBox(height: 16),
+                            if (_isVisible('Supply Date'))
                               Row(
                                 children: [
-                                  if (_isVisible('Supply From'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _supplyFromController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: true),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: _isReadOnly('Supply Date') ? null : _selectDate,
+                                      child: InputDecorator(
                                         decoration: _inputDecoration(
-                                          'Supply From',
-                                          readOnly: true,
+                                          'Supply Date',
+                                          readOnly: _isReadOnly('Supply Date'),
                                         ).copyWith(
-                                          suffixIcon: const Icon(Icons.warehouse_outlined),
+                                          suffixIcon: const Icon(Icons.calendar_today, size: 20),
+                                        ),
+                                        child: Text(
+                                          formatLongDate(_supplyDate),
+                                          style: Theme.of(context).textTheme.bodyMedium,
                                         ),
                                       ),
                                     ),
-                                  if (_isVisible('Supply From') && _isVisible('Supply To'))
-                                    const SizedBox(width: 16),
-                                  if (_isVisible('Supply To'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _supplyToController,
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Supply Date')) const SizedBox(height: 16),
+                            if (_isVisible('Supply From'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _supplyFromController,
+                                      readOnly: true,
+                                      showCursor: false,
+                                      enableInteractiveSelection: false,
+                                      onTap: () => _browseWarehouse(isFrom: true),
+                                      decoration: _inputDecoration(
+                                        'Supply From',
                                         readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: () => _browseWarehouse(isFrom: false),
-                                        decoration: _inputDecoration(
-                                          'Supply To',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.warehouse_outlined),
-                                        ),
+                                      ).copyWith(
+                                        suffixIcon: const Icon(Icons.warehouse_outlined),
                                       ),
                                     ),
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Supply From')) const SizedBox(height: 16),
+                            if (_isVisible('Supply To'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _supplyToController,
+                                      readOnly: true,
+                                      showCursor: false,
+                                      enableInteractiveSelection: false,
+                                      onTap: () => _browseWarehouse(isFrom: false),
+                                      decoration: _inputDecoration(
+                                        'Supply To',
+                                        readOnly: true,
+                                      ).copyWith(
+                                        suffixIcon: const Icon(Icons.warehouse_outlined),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             const SizedBox(height: 16),
@@ -3208,174 +3313,156 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
                   // Order Information
                   ExpansionTile(
+                    key: const PageStorageKey<String>('order_information_tile'),
                     title: const Text(
                       'Order Information',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
+                    initiallyExpanded: true,
+                    maintainState: true,
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            if (_isVisible('Order No.') || _isVisible('Project No.'))
+                            if (_isVisible('Order No.'))
                               Row(
                                 children: [
-                                  if (_isVisible('Order No.'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _orderNoController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _orderNoController,
+                                      readOnly: true,
+                                      showCursor: false,
+                                      enableInteractiveSelection: false,
+                                      onTap: _browseOrderEntryItem,
+                                      decoration: _inputDecoration(
+                                        'Order No.',
                                         readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        onTap: _browseOrderEntryItem,
-                                        decoration: _inputDecoration(
-                                          'Order No.',
-                                          readOnly: true,
-                                        ).copyWith(
-                                          suffixIcon: const Icon(Icons.assignment_outlined),
-                                        ),
+                                      ).copyWith(
+                                        suffixIcon: const Icon(Icons.assignment_outlined),
                                       ),
                                     ),
-                                  if (_isVisible('Order No.') && _isVisible('Project No.'))
-                                    const SizedBox(width: 16),
-                                  if (_isVisible('Project No.'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _projectNoController,
-                                        readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Project No.',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
+                                  ),
                                 ],
                               ),
-                            if (_isVisible('Order No.') || _isVisible('Project No.')) const SizedBox(height: 16),
-                            if (_isVisible('Order ID') || _isVisible('Seq ID'))
+                            if (_isVisible('Order No.')) const SizedBox(height: 16),
+                            if (_isVisible('Project No.'))
                               Row(
                                 children: [
-                                  if (_isVisible('Order ID'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _orderIdController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _projectNoController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Project No.',
                                         readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Order ID',
-                                          readOnly: true,
-                                        ),
-                                        keyboardType: TextInputType.number,
                                       ),
                                     ),
-                                  if (_isVisible('Order ID') && _isVisible('Seq ID')) const SizedBox(width: 16),
-                                  if (_isVisible('Seq ID'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _orderSeqIdController,
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Project No.')) const SizedBox(height: 16),
+                            // Removed Order ID / Seq ID to follow Edit page
+                            const SizedBox(height: 16),
+                            if (_isVisible('Item Code'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _itemCodeController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Item Code',
                                         readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Seq ID',
-                                          readOnly: true,
-                                        ),
-                                        keyboardType: TextInputType.number,
                                       ),
                                     ),
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Item Code')) const SizedBox(height: 16),
+                            if (_isVisible('Item Name'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _itemNameController,
+                                      readOnly: true,
+                                      showCursor: false,
+                                      enableInteractiveSelection: false,
+                                      decoration: _inputDecoration(
+                                        'Item Name',
+                                        readOnly: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Item Name')) const SizedBox(height: 16),
+                            if (_isVisible('Qty Order'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _qtyOrderController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Qty Order',
+                                        readOnly: true,
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (_isVisible('Qty Order')) const SizedBox(height: 16),
+                            if (_isVisible('Heat No'))
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _heatNoController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Heat No',
+                                        readOnly: true,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             const SizedBox(height: 16),
-                            if (_isVisible('Item Code') || _isVisible('Item Name'))
+                            if (_isVisible('Unit'))
                               Row(
                                 children: [
-                                  if (_isVisible('Item Code'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _itemCodeController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _orderUnitController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Unit',
                                         readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Item Code',
-                                          readOnly: true,
-                                        ),
                                       ),
                                     ),
-                                  if (_isVisible('Item Code') && _isVisible('Item Name'))
-                                    const SizedBox(width: 16),
-                                  if (_isVisible('Item Name'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _itemNameController,
-                                        readOnly: true,
-                                        showCursor: false,
-                                        enableInteractiveSelection: false,
-                                        decoration: _inputDecoration(
-                                          'Item Name',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
+                                  ),
                                 ],
                               ),
-                            if (_isVisible('Item Code') || _isVisible('Item Name')) const SizedBox(height: 16),
-                            if (_isVisible('Qty Order') || _isVisible('Heat No'))
+                            if (_isVisible('Unit')) const SizedBox(height: 16),
+                            if (_isVisible('Size'))
                               Row(
                                 children: [
-                                  if (_isVisible('Qty Order'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _qtyOrderController,
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _sizeController,
+                                      readOnly: true,
+                                      decoration: _inputDecoration(
+                                        'Size',
                                         readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Qty Order',
-                                          readOnly: true,
-                                        ),
-                                        keyboardType: TextInputType.number,
                                       ),
                                     ),
-                                  if (_isVisible('Qty Order') && _isVisible('Heat No'))
-                                    const SizedBox(width: 16),
-                                  if (_isVisible('Heat No'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _heatNoController,
-                                        readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Heat No',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
+                                  ),
                                 ],
                               ),
-                            if (_isVisible('Unit') || _isVisible('Size'))
-                              const SizedBox(height: 16),
-                            if (_isVisible('Unit') || _isVisible('Size'))
-                              Row(
-                                children: [
-                                  if (_isVisible('Unit'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _orderUnitController,
-                                        readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Unit',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_isVisible('Unit') && _isVisible('Size')) const SizedBox(width: 16),
-                                  if (_isVisible('Size'))
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _sizeController,
-                                        readOnly: true,
-                                        decoration: _inputDecoration(
-                                          'Size',
-                                          readOnly: true,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            if (_isVisible('Unit') || _isVisible('Size')) const SizedBox(height: 16),
+                            if (_isVisible('Size')) const SizedBox(height: 16),
                             if (_isVisible('Lot No'))
                               Row(
                                 children: [
@@ -3458,10 +3545,13 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   // Signature Information
                   if (_isVisible('Signature Information'))
                     ExpansionTile(
+                      key: const PageStorageKey<String>('signature_information_tile'),
                       title: const Text(
                         'Signature Information',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
+                      initiallyExpanded: true,
+                      maintainState: true,
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(16),
@@ -3582,12 +3672,17 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               ),
             ),
             const SizedBox(height: 16),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: SectionHeader(title: 'Detail'),
+            ),
+            const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Card(
                 child: ExpansionTile(
                   title: const Text(
-                    'Detail Items',
+                    'Item',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   initiallyExpanded: true,
@@ -3711,6 +3806,186 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+class _WarehousePickerSheet extends StatefulWidget {
+  const _WarehousePickerSheet({
+    required this.title,
+    required this.items,
+    this.initialQuery,
+    this.onQueryChanged,
+  });
+
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final String? initialQuery;
+  final ValueChanged<String>? onQueryChanged;
+
+  @override
+  State<_WarehousePickerSheet> createState() => _WarehousePickerSheetState();
+}
+
+class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
+  late final TextEditingController _searchCtrl;
+  late final FocusNode _searchFocusNode;
+  late List<Map<String, dynamic>> _filtered;
+  String? _selectedWarehouseId;
+  Map<String, dynamic>? _selectedItem;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: widget.initialQuery ?? '');
+    _searchFocusNode = FocusNode();
+    _filtered = List.of(widget.items);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter(String q) {
+    if (widget.onQueryChanged != null) {
+      widget.onQueryChanged!(q);
+    }
+    final qq = q.trim().toLowerCase();
+    setState(() {
+      _filtered = qq.isEmpty
+          ? List.of(widget.items)
+          : widget.items.where((raw) {
+              final name = (raw['Org_Name'] ?? '').toString().toLowerCase();
+              final code = (raw['Org_Code'] ?? '').toString().toLowerCase();
+              return name.contains(qq) || code.contains(qq);
+            }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                focusNode: _searchFocusNode,
+                onChanged: _applyFilter,
+                decoration: InputDecoration(
+                  hintText: 'Cari gudang by nama atau kode...',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(8),
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final m = _filtered[index];
+                  final name = (m['Org_Name'] ?? '').toString();
+                  final code = (m['Org_Code'] ?? '').toString();
+                  final id = (m['ID'] ?? '').toString();
+
+                  final selection = Map<String, dynamic>.from(m)
+                    ..putIfAbsent('_displayName', () => name)
+                    ..putIfAbsent('_displayCode', () => code);
+
+                  final details = <String>[];
+                  if (code.isNotEmpty) details.add(code);
+                  final isSelected = _selectedWarehouseId == id;
+
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFF3E5F5),
+                      child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                    ),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                    selected: isSelected,
+                    selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                    onTap: () {
+                      setState(() {
+                        _selectedWarehouseId = id;
+                        _selectedItem = selection;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _selectedItem == null
+                          ? null
+                          : () => Navigator.of(context).pop(_selectedItem),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('OK'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3982,7 +4257,3 @@ class _ColumnMeta {
     );
   }
 }
-
-
-
-

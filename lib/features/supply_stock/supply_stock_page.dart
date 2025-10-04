@@ -11,6 +11,7 @@ import 'models/supply_header.dart';
 import 'models/supply_detail_item.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/responsive/responsive.dart';
+import '../../core/navigation/route_observer.dart';
 
 class SupplyStockPage extends StatefulWidget {
   const SupplyStockPage({super.key});
@@ -19,7 +20,7 @@ class SupplyStockPage extends StatefulWidget {
   State<SupplyStockPage> createState() => _SupplyStockPageState();
 }
 
-class _SupplyStockPageState extends State<SupplyStockPage> {
+class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
   List<SupplyStock> _supplyStocks = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -29,10 +30,59 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
   DateTime _endDate = DateTime.now();
   bool _showDateFilter = false;
 
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     _loadSupplyStocks();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribe to route changes to refresh when coming back from child pages
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    if (route != null && route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    // Unsubscribe from route observer
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Called when a covered route (e.g., Create/Edit) has been popped and this
+    // page becomes visible again. Refresh the list.
+    _loadSupplyStocks();
+  }
+
+  
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+    });
+  }
+
+  List<SupplyStock> get _filteredSupplyStocks {
+    if (_searchQuery.isEmpty) {
+      return _supplyStocks;
+    }
+    return _supplyStocks.where((supply) {
+      return supply.supplyId.toString().toLowerCase().contains(_searchQuery) ||
+          supply.supplyNo.toLowerCase().contains(_searchQuery);
+    }).toList();
   }
 
   Future<void> _loadSupplyStocks() async {
@@ -134,6 +184,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
 
     try {
       final detailSeqIds = <String>[];
+      int detailCount = 0;
       const companyId = 1;
       final detailResult = await ApiService.getSupplyDetail(
         supplyCls: 1,
@@ -148,6 +199,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
           final list = data['tbl1'];
           if (list is List) {
             for (final row in list.whereType<Map>()) {
+              detailCount++;
               final seq = _extractSeqId(row.cast<String, dynamic>());
               if (seq != null && seq.isNotEmpty) {
                 debugPrint('Deleting detail seq $seq for supply ${supply.supplyId}');
@@ -158,17 +210,59 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         }
       }
 
-      if (detailSeqIds.isNotEmpty) {
+      // If there are any detail rows at all, block header deletion and show alert.
+      if (detailCount > 0) {
         if (progressShown && mounted) {
           Navigator.of(context, rootNavigator: true).pop();
           progressShown = false;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Supply ${supply.supplyNo} masih memiliki ${detailSeqIds.length} detail item. Hapus detail terlebih dahulu sebelum menghapus header.',
+        // Show alert instead of snackbar when there are details present
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                SizedBox(width: 8),
+                Text('Tidak Bisa Menghapus'),
+              ],
             ),
-            backgroundColor: Colors.orange,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  'Dokumen: ${supply.supplyNo}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                Text('Detail item: ${detailCount}'),
+                const SizedBox(height: 10),
+                const Text('Hapus semua detail terlebih dahulu sebelum menghapus header.'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('BATAL'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await _openSupplyForEdit(supply);
+                },
+                child: const Text('KELOLA DETAIL'),
+              ),
+            ],
           ),
         );
         return;
@@ -274,6 +368,75 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         SnackBar(
           content: Text('Error menghapus supply: $e'),
           backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openSupplyForEdit(SupplyStock supply) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await ApiService.getSupplyHeader(
+        supplyCls: 1,
+        supplyId: supply.supplyId,
+        userEntry: 'admin',
+        companyId: 1,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (result['success'] == true) {
+        final data = result['data'];
+        final List? tbl1 = data['tbl1'] as List?;
+        final Map<String, dynamic>? headerJson = (tbl1 != null && tbl1.isNotEmpty)
+            ? (tbl1.first as Map).cast<String, dynamic>()
+            : null;
+
+        if (headerJson != null) {
+          final List<SupplyDetailItem> detailItems = [];
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditSupplyPage(
+                header: SupplyHeader.fromJson(headerJson),
+                initialItems: detailItems,
+              ),
+            ),
+          );
+          if (mounted) {
+            _loadSupplyStocks();
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gagal memuat data supply'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        final message = result['message'] ?? 'Gagal memuat data supply';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading supply: $e'),
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -429,6 +592,38 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       body: SafeArea(
         child: Column(
           children: [
+            Container(
+              color: AppColors.surfaceCard,
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: isCompact ? 12 : 16,
+              ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by Supply ID or Supply No...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
             if (_showDateFilter)
               Container(
                 color: AppColors.surfaceCard,
@@ -487,7 +682,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                                 const SectionHeader(title: 'Stock Supply List'),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Total: ${_supplyStocks.length} supply records',
+                                  _searchQuery.isNotEmpty
+                                      ? 'Found: ${_filteredSupplyStocks.length} of ${_supplyStocks.length} records'
+                                      : 'Total: ${_supplyStocks.length} supply records',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
@@ -578,6 +775,41 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
       );
     }
 
+    final displayList = _filteredSupplyStocks;
+
+    if (displayList.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: 64,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Results Found',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No supply records match "$_searchQuery"',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
@@ -585,9 +817,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
         horizontalPadding,
         isCompact ? 24 : 32,
       ),
-      itemCount: _supplyStocks.length,
+      itemCount: displayList.length,
       itemBuilder: (context, index) {
-        final supply = _supplyStocks[index];
+        final supply = displayList[index];
         return Padding(
           padding: EdgeInsets.only(bottom: isCompact ? 10 : 12),
           child: SupplyStockCard(
@@ -666,7 +898,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> {
                 );
               }
             },
-            onDelete: () => _confirmDeleteSupply(supply),
+            // Remove delete from list; delete is handled inside edit page only
           ),
         );
       },
@@ -679,12 +911,10 @@ class SupplyStockCard extends StatelessWidget {
     super.key,
     required this.supply,
     required this.onTap,
-    this.onDelete,
   });
 
   final SupplyStock supply;
   final VoidCallback onTap;
-  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -725,24 +955,11 @@ class SupplyStockCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StatusChip(
-                        label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
-                        tone: supply.stsEdit == 1
-                            ? AppColors.success
-                            : AppColors.textTertiary,
-                      ),
-                      if (onDelete != null) ...[
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Delete',
-                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                          onPressed: onDelete,
-                        ),
-                      ],
-                    ],
+                  StatusChip(
+                    label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
+                    tone: supply.stsEdit == 1
+                        ? AppColors.success
+                        : AppColors.textTertiary,
                   ),
                 ],
               ),

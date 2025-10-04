@@ -89,9 +89,11 @@ class BarcodeScannerService {
     }
 
     try {
-      final result = await ScanbotBarcodeSdk.startBarcodeScanner(
-        BarcodeScannerConfiguration(),
+      // Provide an explicit configuration to avoid lingering state
+      final config = BarcodeScannerConfiguration(
+        // Customize as needed
       );
+      final result = await ScanbotBarcodeSdk.startBarcodeScanner(config);
 
       switch (result.operationResult) {
         case OperationResult.SUCCESS:

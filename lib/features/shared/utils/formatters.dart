@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 String formatCurrency(double value) => 'Rp ${value.toStringAsFixed(2)}';
 
 String formatShortDate(DateTime date) {
@@ -8,7 +10,7 @@ String formatShortDate(DateTime date) {
   } else if (difference == 1) {
     return 'Yesterday';
   }
-  return '${date.day}/${date.month}';
+  return DateFormat('dd-MMM').format(date);
 }
 
-String formatLongDate(DateTime date) => '${date.day}/${date.month}/${date.year}';
+String formatLongDate(DateTime date) => DateFormat('dd-MMM-yyyy').format(date);

@@ -4,6 +4,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/quick_access_page.dart';
 import 'features/shared/services/auth_service.dart';
+import 'core/navigation/route_observer.dart';
 
 class RemoteErpStockApp extends StatelessWidget {
   const RemoteErpStockApp({super.key});
@@ -14,6 +15,7 @@ class RemoteErpStockApp extends StatelessWidget {
       title: 'EOS - Stock Supply',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      navigatorObservers: [appRouteObserver],
       home: AuthGuard(
         child: const QuickAccessPage(),
         loginPage: const LoginPage(),
