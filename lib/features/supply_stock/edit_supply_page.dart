@@ -48,10 +48,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
   final _itemCodeController = TextEditingController();
   final _itemNameController = TextEditingController();
   final _qtyOrderController = TextEditingController();
-  final _heatNoController = TextEditingController();
   final _orderUnitController = TextEditingController();
-  final _sizeController = TextEditingController();
-  final _lotNumberController = TextEditingController();
 
   // References / Template
   final _refNoController = TextEditingController();
@@ -222,10 +219,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     _itemCodeController.dispose();
     _itemNameController.dispose();
     _qtyOrderController.dispose();
-    _heatNoController.dispose();
     _orderUnitController.dispose();
-    _sizeController.dispose();
-    _lotNumberController.dispose();
     _refNoController.dispose();
     _remarksController.dispose();
     _templateNameController.dispose();
@@ -254,10 +248,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     if (header.qty != null && header.qty! > 0) {
       _qtyOrderController.text = header.qty!.toString();
     }
-    if (header.heatNumber.isNotEmpty) _heatNoController.text = header.heatNumber;
     if (header.orderUnit.isNotEmpty) _orderUnitController.text = header.orderUnit;
-    if (header.size.isNotEmpty) _sizeController.text = header.size;
-    if (header.lotNumber.isNotEmpty) _lotNumberController.text = header.lotNumber;
 
     _refNoController.text = header.refNo;
     _remarksController.text = header.remarks;
@@ -441,9 +432,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
           return StatefulBuilder(
             builder: (context, setModal) {
               return DraggableScrollableSheet(
-                initialChildSize: 0.6,
-                minChildSize: 0.4,
-                maxChildSize: 0.9,
+                initialChildSize: 0.98,
+                minChildSize: 0.98,
+                maxChildSize: 1.0,
                 expand: false,
                 builder: (context, scrollController) => Container(
                   decoration: const BoxDecoration(
@@ -473,7 +464,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.close),
+                                icon: const Icon(Icons.close, color: AppColors.gradientStart),
                                 onPressed: () => Navigator.of(sheetContext).pop(),
                               ),
                             ],
@@ -505,9 +496,9 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                               if (position != null && position!.isNotEmpty) details.add(position!);
 
                               return ListTile(
-                                leading: const CircleAvatar(
-                                  backgroundColor: Color(0xFFE3F2FD),
-                                  child: Icon(Icons.person, color: Color(0xFF1976D2)),
+                                leading: CircleAvatar(
+                                  backgroundColor: AppColors.gradientStart.withOpacity(0.1),
+                                  child: const Icon(Icons.person, color: AppColors.gradientStart),
                                 ),
                                 title: Text(
                                   name,
@@ -518,10 +509,10 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                                 trailing: isSelected
-                                    ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
+                                    ? const Icon(Icons.check_circle, color: AppColors.gradientStart)
                                     : const Icon(Icons.chevron_right, color: Colors.grey),
                                 selected: isSelected,
-                                selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                                selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                                 onTap: () {
                                   setModal(() {
                                     selectedEmployeeId = itemId;
@@ -553,7 +544,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                       ? null
                                       : () => Navigator.pop<Map<String, String>>(sheetContext, selectedItem),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryBlue,
+                                    backgroundColor: AppColors.gradientStart,
                                     foregroundColor: Colors.white,
                                   ),
                                   child: const Text('OK'),
@@ -1111,7 +1102,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close, color: AppColors.gradientStart),
                       ),
                     ],
                   ),
@@ -1157,7 +1148,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                       if (qty != null && qty.isNotEmpty) subtitleParts.add('Qty: $qty');
 
                       return ListTile(
-                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryBlue),
+                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.gradientStart),
                         title: Text(
                           name?.isNotEmpty == true ? name! : (codeValue ?? 'Item ${index + 1}'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -1340,12 +1331,12 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           final isSelected = selectedItem == row;
 
                           return ListTile(
-                            leading: const CircleAvatar(child: Icon(Icons.assignment), backgroundColor: Color(0xFFEAF2FF)),
+                            leading: CircleAvatar(child: const Icon(Icons.assignment, color: AppColors.gradientStart), backgroundColor: AppColors.gradientStart.withOpacity(0.1)),
                             title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
                             subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
-                            trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right),
+                            trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
                             selected: isSelected,
-                            selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                            selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                             onTap: () {
                               setModalState(() {
                                 selectedItem = row;
@@ -1373,7 +1364,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                   ? null
                                   : () => Navigator.of(sheetContext).pop(selectedItem),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primaryBlue,
+                                backgroundColor: AppColors.gradientStart,
                                 foregroundColor: Colors.white,
                               ),
                               child: const Text('OK'),
@@ -1454,7 +1445,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     if (itemCode != null) _itemCodeController.text = itemCode;
     if (itemName != null) _itemNameController.text = itemName;
     if (qtyOrder != null) _qtyOrderController.text = qtyOrder;
-    if (heatNumber != null) _heatNoController.text = heatNumber;
 
     setState(() {});
   }
@@ -1482,7 +1472,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.edit, color: AppColors.primaryBlue),
+                    const Icon(Icons.edit, color: AppColors.gradientStart),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
@@ -1492,7 +1482,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: const Icon(Icons.close_rounded, color: AppColors.gradientStart),
                     ),
                   ],
                 ),
@@ -1607,7 +1597,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           const Text('Pilih Item Stock', style: TextStyle(fontWeight: FontWeight.w700)),
                           if (!widget.readOnly)
                             IconButton(
-                              icon: const Icon(Icons.qr_code_scanner),
+                              icon: const Icon(Icons.qr_code_scanner, color: AppColors.gradientStart),
                               tooltip: 'Scan QR Code',
                               onPressed: () {
                                 Navigator.of(sheetContext).pop();
@@ -1627,7 +1617,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                               onSubmitted: (v) => setModal(() { applyFilter(v); }),
                               decoration: InputDecoration(
                                 hintText: 'Cari berdasarkan Item Code...',
-                                prefixIcon: const Icon(Icons.search_rounded),
+                                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.gradientStart),
                                 border: const OutlineInputBorder(),
                                 isDense: true,
                                 suffixIcon: searchCtrl.text.isNotEmpty
@@ -1647,7 +1637,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                             onPressed: () => setModal(() { applyFilter(searchCtrl.text); }),
                             label: const Text('Search'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryBlue,
+                              backgroundColor: AppColors.gradientStart,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                             ),
@@ -1688,7 +1678,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           if (heat.isNotEmpty) infoParts.add('Heat: $heat');
 
                           return ListTile(
-                            leading: const Icon(Icons.inventory_2_outlined),
+                            leading: const Icon(Icons.inventory_2_outlined, color: AppColors.gradientStart),
                             title: Text(primaryTitle),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1709,7 +1699,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                 ),
                               ],
                             ),
-                            trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                             onTap: () => Navigator.of(sheetContext).pop(r),
                           );
                         },
@@ -2599,7 +2589,25 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        title: Text(widget.readOnly ? 'View Stock Supply' : 'Edit Stock Supply'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.gradientStart, AppColors.gradientEnd],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: Text(
+          widget.readOnly ? 'View Stock Supply' : 'Edit Stock Supply',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (!widget.readOnly) ...[
             TextButton(
@@ -2608,7 +2616,7 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                 _isSaving ? 'SAVING...' : 'SAVE',
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primaryBlue,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -2858,22 +2866,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                           ],
                                         ),
                                       if (_isVisible('Qty Order')) const SizedBox(height: 16),
-                                      if (_isVisible('Heat No'))
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: TextFormField(
-                                                controller: _heatNoController,
-                                                readOnly: true,
-                                                decoration: _inputDecoration(
-                                                  'Heat No',
-                                                  readOnly: true,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      const SizedBox(height: 16),
                                       if (_isVisible('Unit'))
                                         Row(
                                           children: [
@@ -2887,31 +2879,6 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                                           ],
                                         ),
                                       if (_isVisible('Unit')) const SizedBox(height: 16),
-                                      if (_isVisible('Size'))
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: TextFormField(
-                                                controller: _sizeController,
-                                                readOnly: true,
-                                                decoration: _inputDecoration('Size', readOnly: true),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      const SizedBox(height: 16),
-                                      if (_isVisible('Lot No'))
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: TextFormField(
-                                                controller: _lotNumberController,
-                                                readOnly: true,
-                                                decoration: _inputDecoration('Lot No', readOnly: true),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
                                     ],
                                   ),
                                 ),
@@ -3295,7 +3262,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: AppColors.gradientStart),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -3309,7 +3276,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                 onChanged: _applyFilter,
                 decoration: const InputDecoration(
                   hintText: 'Cari gudang by nama atau kode...',
-                  prefixIcon: Icon(Icons.search_rounded),
+                  prefixIcon: Icon(Icons.search_rounded, color: AppColors.gradientStart),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -3333,15 +3300,15 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                   final isSelected = _selectedWarehouseId == id;
 
                   return ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFF3E5F5),
-                      child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.gradientStart.withOpacity(0.1),
+                      child: const Icon(Icons.store, color: AppColors.gradientStart),
                     ),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
                     subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
                     selected: isSelected,
-                    selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                    selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                     onTap: () {
                       setState(() {
                         _selectedWarehouseId = id;
@@ -3370,7 +3337,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                           ? null
                           : () => Navigator.of(context).pop(_selectedItem),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
+                        backgroundColor: AppColors.gradientStart,
                         foregroundColor: Colors.white,
                       ),
                       child: const Text('OK'),
@@ -3570,11 +3537,11 @@ class _EditDetailFormState extends State<EditDetailForm> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton(
+                child: OutlinedButton(
                   onPressed: _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: Colors.white,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryBlue,
+                    side: const BorderSide(color: AppColors.primaryBlue),
                   ),
                   child: const Text('Save'),
                 ),

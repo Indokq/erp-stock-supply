@@ -1160,9 +1160,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           return StatefulBuilder(
             builder: (context, setModal) {
               return DraggableScrollableSheet(
-                initialChildSize: 0.6,
-                minChildSize: 0.4,
-                maxChildSize: 0.9,
+                initialChildSize: 0.98,
+                minChildSize: 0.98,
+                maxChildSize: 1.0,
                 expand: false,
                 builder: (context, scrollController) => Container(
                   decoration: const BoxDecoration(
@@ -1192,7 +1192,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(Icons.close, color: AppColors.gradientStart),
                           onPressed: () => Navigator.of(sheetContext).pop(),
                         ),
                       ],
@@ -1272,9 +1272,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             details.join(' • '),
                             style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
                           selected: isSelected,
-                          selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                          selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                           onTap: () {
                             debugPrint('🔘 Order Entry item tapped: $itemId');
                             setModal(() {
@@ -1295,6 +1295,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.of(sheetContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                             child: const Text('Cancel'),
                           ),
                         ),
@@ -1305,8 +1310,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 ? null
                                 : () => Navigator.of(sheetContext).pop(selectedItem),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryBlue,
+                              backgroundColor: AppColors.gradientStart,
                               foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: const Text('OK'),
                           ),
@@ -1547,9 +1555,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
           return StatefulBuilder(
             builder: (context, setModal) {
               return DraggableScrollableSheet(
-                initialChildSize: 0.6,
-                minChildSize: 0.4,
-                maxChildSize: 0.9,
+                initialChildSize: 0.98,
+                minChildSize: 0.98,
+                maxChildSize: 1.0,
                 expand: false,
                 builder: (context, scrollController) => Container(
                   decoration: const BoxDecoration(
@@ -1579,7 +1587,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.close),
+                              icon: const Icon(Icons.close, color: AppColors.gradientStart),
                               onPressed: () => Navigator.of(sheetContext).pop(),
                             ),
                           ],
@@ -1655,9 +1663,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             final isSelected = selectedEmployeeId == itemId;
 
                             return ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFE3F2FD),
-                                child: Icon(Icons.person, color: Color(0xFF1976D2)),
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.gradientStart.withOpacity(0.1),
+                                child: const Icon(Icons.person, color: AppColors.gradientStart),
                               ),
                               title: Text(
                                 name,
@@ -1667,9 +1675,9 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 details.join(' • '),
                                 style: const TextStyle(fontSize: 12, color: Colors.grey),
                               ),
-                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
                               selected: isSelected,
-                              selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                              selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                               onTap: () {
                                 debugPrint('👤 Employee item tapped: $itemId');
                                 setModal(() {
@@ -1690,6 +1698,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () => Navigator.of(sheetContext).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
                                 child: const Text('Cancel'),
                               ),
                             ),
@@ -1700,8 +1713,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                     ? null
                                     : () => Navigator.of(sheetContext).pop(selectedItem),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryBlue,
+                                  backgroundColor: AppColors.gradientStart,
                                   foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                                 child: const Text('OK'),
                               ),
@@ -1877,142 +1893,137 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Browse Item Stock',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+          Map<String, dynamic>? selectedItem;
+          String? selectedKey;
+          String itemKeyOf(Map<String, dynamic> row, int index) {
+            return _getStringValue(
+                      row,
+                      const ['ID','Id','Item_ID','ItemId','ItemCode','Code'],
+                      partialMatches: const ['itemid','code','id'],
+                    ) ?? index.toString();
+          }
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final title = _getStringValue(
-                              row,
-                              const [
-                                'Item_Name',
-                                'ItemName',
-                                'Name',
-                                'Description',
-                                'colName',
-                                'colname',
-                                'ColName',
-                                'Colname',
-                                'colName1',
-                                'colname1',
-                                'Column1',
-                                'Column_1',
-                              ],
-                              partialMatches: const ['itemname', 'description', 'colname', 'namestock', 'namabarang'],
-                            ) ??
-                            _getStringValue(
-                              row,
-                              const [],
-                              partialMatches: const ['name', 'desc', 'barang', 'produk'],
-                            ) ??
-                            'Item ${index + 1}';
-                        final code = _getStringValue(
-                          row,
-                          const ['Item_Code', 'ItemCode', 'Code', 'colCode', 'colcode', 'ColCode'],
-                          partialMatches: const ['itemcode', 'kode', 'code'],
-                        );
-                        final lot = _getStringValue(
-                          row,
-                          const ['Lot_No', 'LotNo', 'Lot_Number', 'Lot'],
-                        );
-                        final qty = _getStringValue(
-                          row,
-                          const [
-                            'Qty',
-                            'Quantity',
-                            'Qty_Available',
-                            'Qty_Order',
-                            'Balance',
-                            'Unit_Stock',
-                            'Stock',
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Browse Item Stock',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: AppColors.gradientStart),
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                            ),
                           ],
-                          partialMatches: const ['qty', 'quantity', 'jumlah', 'balance', 'stock'],
-                        );
-                        final unit = _getStringValue(
-                          row,
-                          const ['Unit', 'Unit_Stock', 'UOM'],
-                          partialMatches: const ['unit', 'uom', 'stockunit'],
-                        );
-                        final heat = _getStringValue(
-                          row,
-                          const ['Heat_No', 'HeatNo', 'Heat_Number'],
-                        );
-                        final size = _getStringValue(
-                          row,
-                          const ['Size', 'Item_Size', 'colSize', 'colsize', 'ColSize'],
-                          partialMatches: const ['size', 'dimension'],
-                        );
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Flexible(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: visibleItems.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final row = visibleItems[index];
+                            final title = _getStringValue(
+                                  row,
+                                  const ['Item_Name','ItemName','Name','Description','colName','colname','ColName','Colname','colName1','colname1','Column1','Column_1'],
+                                  partialMatches: const ['itemname','description','colname','namestock','namabarang'],
+                                ) ??
+                                _getStringValue(row, const [], partialMatches: const ['name','desc','barang','produk']) ??
+                                'Item ${index + 1}';
+                            final code = _getStringValue(row, const ['Item_Code','ItemCode','Code','colCode','colcode','ColCode'], partialMatches: const ['itemcode','kode','code']);
+                            final lot = _getStringValue(row, const ['Lot_No','LotNo','Lot_Number','Lot']);
+                            final qty = _getStringValue(row, const ['Qty','Quantity','Qty_Available','Qty_Order','Balance','Unit_Stock','Stock'], partialMatches: const ['qty','quantity','jumlah','balance','stock']);
+                            final unit = _getStringValue(row, const ['Unit','Unit_Stock','UOM'], partialMatches: const ['unit','uom','stockunit']);
+                            final heat = _getStringValue(row, const ['Heat_No','HeatNo','Heat_Number']);
+                            final size = _getStringValue(row, const ['Size','Item_Size','colSize','colsize','ColSize'], partialMatches: const ['size','dimension']);
+                            final key = itemKeyOf(row, index);
+                            final isSelected = selectedKey == key;
 
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayName', () => title);
+                            final selection = Map<String, dynamic>.from(row)..putIfAbsent('_displayName', () => title);
+                            final details = <String>[];
+                            if (code != null) details.add(code);
+                            if (lot != null) details.add('Lot: $lot');
+                            if (qty != null) details.add('Qty: $qty');
+                            if (unit != null) details.add(unit);
+                            if (heat != null) details.add('Heat: $heat');
+                            if (size != null) details.add('Size: $size');
 
-                        final details = <String>[];
-                        if (code != null) details.add(code);
-                        if (lot != null) details.add('Lot: $lot');
-                        if (qty != null) details.add('Qty: $qty');
-                        if (unit != null) details.add(unit);
-                        if (heat != null) details.add('Heat: $heat');
-                        if (size != null) details.add('Size: $size');
-
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFFFF3E0),
-                            child: Icon(Icons.inventory, color: Color(0xFFFF9800)),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: details.isEmpty ? null : Text(
-                            details.join(' • '),
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => Navigator.of(sheetContext).pop(selection),
-                        );
-                      },
-                    ),
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.gradientStart.withOpacity(0.1),
+                                child: const Icon(Icons.inventory, color: AppColors.gradientStart),
+                              ),
+                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                              subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.gradientStart.withOpacity(0.08),
+                              onTap: () => setModal(() { selectedKey = key; selectedItem = selection; }),
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(sheetContext).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: selectedItem == null ? null : () => Navigator.of(sheetContext).pop(selectedItem),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.gradientStart,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text('OK'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       );
@@ -2755,7 +2766,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                       if (qty != null && qty.isNotEmpty) subtitleParts.add('Qty: $qty');
 
                       return ListTile(
-                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryBlue),
+                        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.gradientStart),
                         title: Text(
                           name?.isNotEmpty == true ? name! : (code ?? 'Item ${index + 1}'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -2923,6 +2934,16 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         builder: (sheetContext) {
           final TextEditingController searchCtrl = TextEditingController();
           List<Map<String, dynamic>> filtered = List.of(items);
+          Map<String, dynamic>? selectedItem;
+          String? selectedKey;
+
+          String itemKeyOf(Map<String, dynamic> row, int index) {
+            return _getStringValue(
+                      row,
+                      const ['ID','Id','Item_ID','ItemId','ItemCode','Code'],
+                      partialMatches: const ['itemid','code','id'],
+                    ) ?? index.toString();
+          }
 
           void applyFilter(String q) {
             final query = q.trim().toLowerCase();
@@ -2986,7 +3007,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               ],
                             ),
                             IconButton(
-                              icon: const Icon(Icons.qr_code_scanner),
+                              icon: const Icon(Icons.qr_code_scanner, color: AppColors.gradientStart),
                               onPressed: () {
                                 Navigator.of(sheetContext).pop();
                                 _scanQRForDetailItem(rowIndex);
@@ -3006,7 +3027,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 onSubmitted: (v) => setModalState(() { applyFilter(v); }),
                                 decoration: InputDecoration(
                                   hintText: 'Cari berdasarkan Item Code...',
-                                  prefixIcon: const Icon(Icons.search_rounded),
+                                  prefixIcon: const Icon(Icons.search_rounded, color: AppColors.gradientStart),
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                   suffixIcon: searchCtrl.text.isNotEmpty
@@ -3026,7 +3047,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                               onPressed: () => setModalState(() { applyFilter(searchCtrl.text); }),
                               label: const Text('Search'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primaryBlue,
+                                backgroundColor: AppColors.gradientStart,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                               ),
@@ -3071,8 +3092,12 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             infoParts.add('Lot: $lot');
                             if (heat.isNotEmpty) infoParts.add('Heat: $heat');
 
+                            final key = itemKeyOf(row, index);
+                            final isSelected = selectedKey == key;
+                            final selection = Map<String, dynamic>.from(row);
+
                             return ListTile(
-                              leading: const Icon(Icons.inventory_2_outlined),
+                              leading: const Icon(Icons.inventory_2_outlined, color: AppColors.gradientStart),
                               title: Text(primaryTitle, style: const TextStyle(fontWeight: FontWeight.w500)),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3093,10 +3118,45 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                   ),
                                 ],
                               ),
-                              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                              onTap: () => Navigator.of(sheetContext).pop(row),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.gradientStart.withOpacity(0.08),
+                              onTap: () => setModalState(() { selectedKey = key; selectedItem = selection; }),
                             );
                           },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(sheetContext).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: selectedItem == null ? null : () => Navigator.of(sheetContext).pop(selectedItem),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.gradientStart,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text('OK'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -3163,7 +3223,22 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        title: Text(widget.isEdit ? 'Stock Supply - Edit Header' : 'Stock Supply - Header'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.gradientStart, AppColors.gradientEnd],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: Text(
+          widget.isEdit ? 'Stock Supply - Edit Header' : 'Stock Supply - Header',
+          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           TextButton(
             onPressed: _saveHeaderAndProceed,
@@ -3171,11 +3246,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
               'SAVE',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: AppColors.primaryBlue,
+                color: Colors.white,
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
       ),
       body: Form(
@@ -3186,7 +3261,14 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
             children: [
               // Header Section
               Container(
-                color: AppColors.surfaceCard,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderLight),
+                  boxShadow: const [
+                    BoxShadow(color: AppColors.shadowLight, blurRadius: 12, offset: Offset(0, 4)),
+                  ],
+                ),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3415,22 +3497,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 ],
                               ),
                             if (_isVisible('Qty Order')) const SizedBox(height: 16),
-                            if (_isVisible('Heat No'))
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _heatNoController,
-                                      readOnly: true,
-                                      decoration: _inputDecoration(
-                                        'Heat No',
-                                        readOnly: true,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            const SizedBox(height: 16),
                             if (_isVisible('Unit'))
                               Row(
                                 children: [
@@ -3447,37 +3513,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                 ],
                               ),
                             if (_isVisible('Unit')) const SizedBox(height: 16),
-                            if (_isVisible('Size'))
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _sizeController,
-                                      readOnly: true,
-                                      decoration: _inputDecoration(
-                                        'Size',
-                                        readOnly: true,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            if (_isVisible('Size')) const SizedBox(height: 16),
-                            if (_isVisible('Lot No'))
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _lotNumberController,
-                                      readOnly: true,
-                                      decoration: _inputDecoration(
-                                        'Lot No',
-                                        readOnly: true,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
                           ],
                         ),
                       ),
@@ -3896,7 +3931,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: AppColors.gradientStart),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -3910,7 +3945,7 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                 onChanged: _applyFilter,
                 decoration: InputDecoration(
                   hintText: 'Cari gudang by nama atau kode...',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(Icons.search_rounded, color: AppColors.gradientStart),
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -3938,15 +3973,15 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                   final isSelected = _selectedWarehouseId == id;
 
                   return ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFF3E5F5),
-                      child: Icon(Icons.store, color: Color(0xFF7B1FA2)),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.gradientStart.withOpacity(0.1),
+                      child: const Icon(Icons.store, color: AppColors.gradientStart),
                     ),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
                     subtitle: details.isEmpty ? null : Text(details.join(' • '), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryBlue) : const Icon(Icons.chevron_right, color: Colors.grey),
+                    trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
                     selected: isSelected,
-                    selectedTileColor: AppColors.primaryBlue.withOpacity(0.1),
+                    selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
                     onTap: () {
                       setState(() {
                         _selectedWarehouseId = id;
@@ -3965,6 +4000,11 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -3975,8 +4015,11 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                           ? null
                           : () => Navigator.of(context).pop(_selectedItem),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
+                        backgroundColor: AppColors.gradientStart,
                         foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: const Text('OK'),
                     ),
@@ -4181,23 +4224,11 @@ class _DetailItemRowState extends State<DetailItemRow> {
             decoration: _decoration('Description').copyWith(
               fillColor: widget.readOnly ? AppColors.readOnlyYellow : Colors.white,
             ),
-            maxLines: 2,
             textInputAction: TextInputAction.done,
             onChanged: (_) => _emitChange(),
           ),
         ),
         const SizedBox(width: 8),
-        if (widget.onEdit != null)
-          SizedBox(
-            width: 48,
-            child: IconButton(
-              onPressed: widget.onEdit,
-              icon: const Icon(Icons.edit_outlined),
-              color: AppColors.primaryBlue,
-              tooltip: 'Edit item',
-            ),
-          ),
-        if (widget.onEdit != null) const SizedBox(width: 8),
         SizedBox(
           width: 48,
           child: IconButton(

@@ -572,54 +572,86 @@ class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        title: const Text('Stock Supply'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.gradientStart, AppColors.gradientEnd],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: const Text(
+          'Stock Supply',
+          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: Icon(
               _showDateFilter ? Icons.filter_list : Icons.filter_list_outlined,
+              color: Colors.white,
             ),
             onPressed: _toggleDateFilter,
             tooltip: 'Date Filter',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadSupplyStocks,
             tooltip: 'Refresh',
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navigateToCreateSupply,
+        backgroundColor: AppColors.gradientStart,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Create Supply'),
       ),
       body: SafeArea(
         child: Column(
           children: [
+            // Search bar area
             Container(
-              color: AppColors.surfaceCard,
-              padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: isCompact ? 12 : 16,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.gradientStart, AppColors.gradientEnd],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by Supply ID or Supply No...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, isCompact ? 14 : 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(color: AppColors.shadowLight, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search by Supply ID or Supply No...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => _searchController.clear(),
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   ),
                 ),
               ),
@@ -666,44 +698,35 @@ class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
                 horizontalPadding,
                 isCompact ? 12 : 20,
               ),
-              child: Card(
-                child: Padding(
-                  padding: EdgeInsets.all(isCompact ? 16 : 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderLight),
+                  boxShadow: const [
+                    BoxShadow(color: AppColors.shadowLight, blurRadius: 12, offset: Offset(0, 4)),
+                  ],
+                ),
+                padding: EdgeInsets.all(isCompact ? 16 : 18),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SectionHeader(title: 'Stock Supply List'),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _searchQuery.isNotEmpty
-                                      ? 'Found: ${_filteredSupplyStocks.length} of ${_supplyStocks.length} records'
-                                      : 'Total: ${_supplyStocks.length} supply records',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                ),
-                              ],
-                            ),
+                          const SectionHeader(title: 'Stock Supply List'),
+                          const SizedBox(height: 8),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'Found: ${_filteredSupplyStocks.length} of ${_supplyStocks.length} records'
+                                : 'Total: ${_supplyStocks.length} supply records',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
                           ),
-                          if (!isCompact) _buildCreateButton(),
                         ],
                       ),
-                      if (isCompact) ...[
-                        const SizedBox(height: 12),
-                        _buildCreateButton(fillWidth: true),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -810,7 +833,9 @@ class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
       );
     }
 
-    return ListView.builder(
+    return RefreshIndicator(
+      onRefresh: () async => _loadSupplyStocks(),
+      child: ListView.builder(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
         isCompact ? 12 : 20,
@@ -902,6 +927,7 @@ class _SupplyStockPageState extends State<SupplyStockPage> with RouteAware {
           ),
         );
       },
+    ),
     );
   }
 }
@@ -921,11 +947,24 @@ class SupplyStockCard extends StatelessWidget {
     final isCompact = Responsive.isCompact(context);
     final isMedium = Responsive.isMedium(context);
 
-    return Card(
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Colors.white, AppColors.surfaceDark],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: const [
+              BoxShadow(color: AppColors.shadowLight, blurRadius: 12, offset: Offset(0, 4)),
+            ],
+          ),
           padding: EdgeInsets.all(isCompact ? 14 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -935,31 +974,46 @@ class SupplyStockCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          supply.supplyNo,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.primaryBlue.withOpacity(0.08),
+                            border: Border.all(color: AppColors.primaryBlue.withOpacity(0.2)),
+                          ),
+                          child: const Icon(Icons.inventory_2_rounded, color: AppColors.primaryBlue, size: 20),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          formatLongDate(supply.supplyDate),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                supply.supplyNo,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
                               ),
+                              const SizedBox(height: 4),
+                              Text(
+                                formatLongDate(supply.supplyDate),
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
                   StatusChip(
-                    label: supply.stsEdit == 1 ? 'Edit' : 'Locked',
-                    tone: supply.stsEdit == 1
-                        ? AppColors.success
-                        : AppColors.textTertiary,
+                    label: supply.stsEdit == 1 ? 'Editable' : 'Locked',
+                    tone: supply.stsEdit == 1 ? AppColors.success : AppColors.textTertiary,
                   ),
                 ],
               ),
