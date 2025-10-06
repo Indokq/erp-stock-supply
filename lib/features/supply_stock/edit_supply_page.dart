@@ -534,6 +534,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                               Expanded(
                                 child: OutlinedButton(
                                   onPressed: () => Navigator.of(sheetContext).pop(),
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                   child: const Text('Cancel'),
                                 ),
                               ),
@@ -1354,6 +1359,11 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () => Navigator.of(sheetContext).pop(),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
                               child: const Text('Cancel'),
                             ),
                           ),
@@ -3327,6 +3337,11 @@ class _WarehousePickerSheetState extends State<_WarehousePickerSheet> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                       child: const Text('Cancel'),
                     ),
                   ),
