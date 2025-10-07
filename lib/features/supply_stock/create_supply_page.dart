@@ -95,6 +95,8 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
   // Detail items maintained on the same page as the header
   List<SupplyDetailItem> _detailItems = [];
+  // Persist last query for Detail Item picker to keep search history across cancels
+  String _lastDetailItemSearchQuery = '';
 
   // Some nested sections are expected to stay visible even when backend metadata is missing
   static const Set<String> _fallbackVisibleCols = {
@@ -1200,88 +1202,92 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                   ),
                   const Divider(height: 1),
                   Flexible(
-                    child: ListView.separated(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(8),
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = visibleItems[index];
-                        final orderNo = _getStringValue(
-                          row,
-                          const [
-                            'Order_No',
-                            'OrderNo',
-                            'No_Order',
-                            'Order_Number',
-                          ],
-                          partialMatches: const ['orderno', 'noorder', 'order', 'number'],
-                        );
-                        final orderId = _getStringValue(
-                          row,
-                          const [
-                            'Order_ID',
-                            'OrderId',
-                            'ID_Order',
-                            'ID',
-                          ],
-                          partialMatches: const ['orderid', 'idorder'],
-                        );
-                        final projectNo = _getStringValue(
-                          row,
-                          const [
-                            'Project_No',
-                            'ProjectNo',
-                            'No_Project',
-                            'Project_Number',
-                          ],
-                          partialMatches: const ['projectno', 'noproject', 'project', 'number'],
-                        );
-                        final description = _getStringValue(
-                          row,
-                          const [
-                            'Description',
-                            'Remark',
-                            'Notes',
-                          ],
-                          partialMatches: const ['description', 'remark', 'notes', 'desc'],
-                        );
+                    child: Builder(
+                      builder: (_) {
+                        // Deduplicate by Order No
+                        final List<Map<String, dynamic>> unique = [];
+                        final Set<String> seenOrderNos = {};
+                        for (final row in visibleItems) {
+                          final orderNo = _getStringValue(
+                            row,
+                            const ['Order_No','OrderNo','No_Order','Order_Number'],
+                            partialMatches: const ['orderno','noorder','order','number'],
+                          );
+                          if (orderNo != null && orderNo.isNotEmpty) {
+                            if (seenOrderNos.contains(orderNo)) continue;
+                            seenOrderNos.add(orderNo);
+                          }
+                          unique.add(row);
+                        }
 
-                        final selection = Map<String, dynamic>.from(row)
-                          ..putIfAbsent('_displayOrderNo', () => orderNo ?? 'Order ${index + 1}')
-                          ..putIfAbsent('_displayProjectNo', () => projectNo ?? '');
+                        return ListView.separated(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(8),
+                          itemCount: unique.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final row = unique[index];
+                            final orderNo = _getStringValue(
+                              row,
+                              const ['Order_No','OrderNo','No_Order','Order_Number'],
+                              partialMatches: const ['orderno','noorder','order','number'],
+                            );
+                            final orderId = _getStringValue(
+                              row,
+                              const ['Order_ID','OrderId','ID_Order','ID'],
+                              partialMatches: const ['orderid','idorder'],
+                            );
+                            final projectNo = _getStringValue(
+                              row,
+                              const ['Project_No','ProjectNo','No_Project','Project_Number'],
+                              partialMatches: const ['projectno','noproject','project','number'],
+                            );
+                            final description = _getStringValue(
+                              row,
+                              const ['Description','Remark','Notes'],
+                              partialMatches: const ['description','remark','notes','desc'],
+                            );
 
-                        final details = <String>[];
-                        if (projectNo != null) details.add('Project: $projectNo');
-                        if (description != null) details.add(description);
+                            final selection = Map<String, dynamic>.from(row)
+                              ..putIfAbsent('_displayOrderNo', () => orderNo ?? 'Order ${index + 1}')
+                              ..putIfAbsent('_displayProjectNo', () => projectNo ?? '');
 
-                        // Use unique identifier for comparison
-                        final itemId = orderId ?? orderNo ?? index.toString();
-                        final isSelected = selectedOrderId == itemId;
+                            final details = <String>[];
+                            if (projectNo != null) details.add('Project: $projectNo');
+                            if (description != null) details.add(description);
 
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFE8F5E8),
-                            child: Icon(Icons.assignment, color: Color(0xFF388E3C)),
-                          ),
-                          title: Text(
-                            orderNo ?? 'Order ${index + 1}',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: details.isEmpty ? null : Text(
-                            details.join(' • '),
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
-                          selected: isSelected,
-                          selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
-                          onTap: () {
-                            debugPrint('🔘 Order Entry item tapped: $itemId');
-                            setModal(() {
-                              selectedOrderId = itemId;
-                              selectedItem = selection;
-                              debugPrint('✅ Order Entry selection state updated: $selectedOrderId');
-                            });
+                            final itemId = orderId ?? orderNo ?? index.toString();
+                            final isSelected = selectedOrderId == itemId;
+
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFE8F5E8),
+                                child: Icon(Icons.assignment, color: Color(0xFF388E3C)),
+                              ),
+                              title: Text(
+                                orderNo ?? 'Order ${index + 1}',
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: details.isEmpty
+                                  ? null
+                                  : Text(
+                                      details.join(' • '),
+                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                              trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
+                              selected: isSelected,
+                              selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
+                              onTap: () {
+                                setModal(() {
+                                  selectedOrderId = itemId;
+                                  selectedItem = selection;
+                                });
+                              },
+                            );
                           },
                         );
                       },
@@ -2848,7 +2854,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       final selectionRaw = Map<String, dynamic>.from(chosen!);
       final detail = await _fetchItemDetail(selectionRaw);
       final source = detail ?? selectionRaw;
-      _applyItemSelection(source);
       final updated = _mergeDetailItemFromStock(
         current: _detailItems[rowIndex],
         primaryData: source,
@@ -2932,7 +2937,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          final TextEditingController searchCtrl = TextEditingController();
+          final TextEditingController searchCtrl = TextEditingController(text: _lastDetailItemSearchQuery);
           List<Map<String, dynamic>> filtered = List.of(items);
           Map<String, dynamic>? selectedItem;
           String? selectedKey;
@@ -2947,6 +2952,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
 
           void applyFilter(String q) {
             final query = q.trim().toLowerCase();
+            _lastDetailItemSearchQuery = q;
             filtered = query.isEmpty
                 ? List.of(items)
                 : items.where((row) {
@@ -2969,6 +2975,11 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                     final lotLc = (lot ?? '').toLowerCase();
                     return codeLc.contains(query) || nameLc.contains(query) || lotLc.contains(query);
                   }).toList();
+          }
+
+          // Apply initial filter if there was a previous query
+          if ((searchCtrl.text).trim().isNotEmpty) {
+            applyFilter(searchCtrl.text);
           }
 
           return StatefulBuilder(
@@ -3024,6 +3035,7 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                             Expanded(
                               child: TextField(
                                 controller: searchCtrl,
+                                onChanged: (v) => setModalState(() { applyFilter(v); }),
                                 onSubmitted: (v) => setModalState(() { applyFilter(v); }),
                                 decoration: InputDecoration(
                                   hintText: 'Cari berdasarkan Item Code...',
@@ -3034,8 +3046,10 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
                                       ? IconButton(
                                           icon: const Icon(Icons.clear),
                                           onPressed: () {
-                                            searchCtrl.clear();
-                                            setModalState(() { applyFilter(''); });
+                                            setModalState(() {
+                                              searchCtrl.clear();
+                                              applyFilter('');
+                                            });
                                           },
                                         )
                                       : null,
@@ -3173,7 +3187,6 @@ class _CreateSupplyPageState extends State<CreateSupplyPage> {
       final selectionRaw = Map<String, dynamic>.from(selected);
       final detail = await _fetchItemDetail(selectionRaw);
       final source = detail ?? selectionRaw;
-      _applyItemSelection(source);
       final updated = _mergeDetailItemFromStock(
         current: _detailItems[rowIndex],
         primaryData: source,

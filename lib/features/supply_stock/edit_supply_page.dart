@@ -1307,45 +1307,61 @@ class _EditSupplyPageState extends State<EditSupplyPage> {
                     ),
                     const Divider(height: 1),
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final row = items[index];
-                          final orderNo = _getStringValue(
-                            row,
-                            const ['Order_No', 'OrderNo', 'No_Order', 'Order_Number'],
-                            partialMatches: const ['orderno', 'noorder', 'order', 'number'],
-                          );
-                          final projectNo = _getStringValue(
-                            row,
-                            const ['Project_No', 'ProjectNo', 'No_Project', 'Project_Number'],
-                            partialMatches: const ['projectno', 'noproject', 'project', 'number'],
-                          );
-                          final description = _getStringValue(
-                            row,
-                            const ['Description', 'Remark', 'Notes'],
-                            partialMatches: const ['description', 'remark', 'notes', 'desc'],
-                          );
-                          final title = orderNo!;
-                          final subtitle = [
-                            if (projectNo != null && projectNo.isNotEmpty) 'Project: $projectNo',
-                            if (description != null && description.isNotEmpty) description,
-                          ].join(' • ');
+                      child: Builder(
+                        builder: (_) {
+                          // Deduplicate by Order No
+                          final List<Map<String, dynamic>> unique = [];
+                          final Set<String> seenOrderNos = {};
+                          for (final row in items) {
+                            final orderNo = _getStringValue(
+                              row,
+                              const ['Order_No','OrderNo','No_Order','Order_Number'],
+                              partialMatches: const ['orderno','noorder','order','number'],
+                            );
+                            if (orderNo != null && orderNo.isNotEmpty) {
+                              if (seenOrderNos.contains(orderNo)) continue;
+                              seenOrderNos.add(orderNo);
+                            }
+                            unique.add(row);
+                          }
 
-                          final isSelected = selectedItem == row;
+                          return ListView.separated(
+                            itemCount: unique.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final row = unique[index];
+                              final orderNo = _getStringValue(
+                                row,
+                                const ['Order_No','OrderNo','No_Order','Order_Number'],
+                                partialMatches: const ['orderno','noorder','order','number'],
+                              );
+                              final projectNo = _getStringValue(
+                                row,
+                                const ['Project_No','ProjectNo','No_Project','Project_Number'],
+                                partialMatches: const ['projectno','noproject','project','number'],
+                              );
+                              final description = _getStringValue(
+                                row,
+                                const ['Description','Remark','Notes'],
+                                partialMatches: const ['description','remark','notes','desc'],
+                              );
+                              final subtitle = [
+                                if (projectNo != null && projectNo.isNotEmpty) 'Project: $projectNo',
+                                if (description != null && description.isNotEmpty) description,
+                              ].join(' • ');
 
-                          return ListTile(
-                            leading: CircleAvatar(child: const Icon(Icons.assignment, color: AppColors.gradientStart), backgroundColor: AppColors.gradientStart.withOpacity(0.1)),
-                            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
-                            trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
-                            selected: isSelected,
-                            selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
-                            onTap: () {
-                              setModalState(() {
-                                selectedItem = row;
-                              });
+                              final isSelected = selectedItem == row;
+                              return ListTile(
+                                leading: CircleAvatar(child: const Icon(Icons.assignment, color: AppColors.gradientStart), backgroundColor: AppColors.gradientStart.withOpacity(0.1)),
+                                title: Text(orderNo ?? 'Order', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                subtitle: subtitle.isEmpty ? null : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.gradientStart) : const Icon(Icons.chevron_right, color: Colors.grey),
+                                selected: isSelected,
+                                selectedTileColor: AppColors.gradientStart.withOpacity(0.1),
+                                onTap: () {
+                                  setModalState(() { selectedItem = row; });
+                                },
+                              );
                             },
                           );
                         },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared/services/api_service.dart';
 import '../shared/services/auth_service.dart';
+import '../../core/theme/app_colors.dart';
 
 /// Palette tuned to match the overall ERP brand without loud accents.
 class LoginColors {
@@ -88,11 +89,11 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color.fromARGB(255, 255, 255, 255), Color.fromARGB(255, 255, 255, 255)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.surfaceLight, AppColors.surfaceDark],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
@@ -105,8 +106,6 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _LogoBadge(theme: theme),
-                    const SizedBox(height: 36),
-                    _AnimatedHeadline(),
                     const SizedBox(height: 24),
                     _buildFormCard(theme),
                   ],
@@ -121,22 +120,26 @@ class _LoginPageState extends State<LoginPage> {
 
   Widget _buildFormCard(ThemeData theme) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       decoration: BoxDecoration(
-        color: LoginColors.cardSurface,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: LoginColors.cardBorder),
+        gradient: const LinearGradient(
+          colors: [AppColors.gradientStart, AppColors.gradientEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A0F172A),
-            blurRadius: 28,
-            offset: Offset(0, 18),
-            spreadRadius: -12,
-          ),
+          BoxShadow(color: AppColors.shadowLight, blurRadius: 24, offset: Offset(0, 14)),
         ],
       ),
-      child: Form(
+      padding: const EdgeInsets.all(1.2),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        decoration: BoxDecoration(
+          color: LoginColors.cardSurface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,12 +204,12 @@ class _LoginPageState extends State<LoginPage> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _handleLogin,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: LoginColors.primary,
+                  backgroundColor: AppColors.gradientStart,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 child: _isLoading
@@ -229,6 +232,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -286,19 +290,19 @@ class _LoginPageState extends State<LoginPage> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: LoginColors.cardBorder),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: const BorderSide(color: LoginColors.primary, width: 1.4),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.gradientStart, width: 1.4),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: LoginColors.error),
             ),
             focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: LoginColors.error, width: 1.4),
             ),
           ),

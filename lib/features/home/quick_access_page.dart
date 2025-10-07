@@ -66,14 +66,14 @@ class QuickAccessPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Card(
+                      elevation: 0,
+                      color: AppColors.surfaceCard,
                       child: Padding(
                         padding: const EdgeInsets.all(18),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SectionHeader(
-                              title: 'Menu',
-                            ),
+                            const SectionHeader(title: 'Menu'),
                             const SizedBox(height: 12),
                             LayoutBuilder(
                               builder: (context, constraints) {
@@ -83,11 +83,7 @@ class QuickAccessPage extends StatelessWidget {
                                     : width < 600
                                         ? 2
                                         : 3;
-                                final double aspectRatio = width < 360
-                                    ? 1.25 // taller tiles on very small phones
-                                    : width < 600
-                                        ? 0.95
-                                        : 1.0;
+                                final double aspectRatio = width < 360 ? 1.15 : (width < 600 ? 0.98 : 1.0);
                                 return GridView.builder(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
@@ -103,7 +99,7 @@ class QuickAccessPage extends StatelessWidget {
                                     return QuickActionTile(
                                       label: action.label,
                                       icon: action.icon,
-                                      color: action.color,
+                                      color: AppColors.gradientStart,
                                       onTap: () => _handleQuickActionTap(context, action.label),
                                     );
                                   },
